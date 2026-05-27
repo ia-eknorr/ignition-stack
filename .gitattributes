@@ -1,0 +1,9 @@
+# Force LF line endings - this CLI must generate identical files on Linux/macOS/Windows.
+* text eol=lf
+
+# Binary types we may carry or generate
+*.png binary
+*.modl binary
+*.jar binary
+*.gwbk binary
+*.bin binary
