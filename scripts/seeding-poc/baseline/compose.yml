@@ -1,0 +1,71 @@
+---
+# Phase 1 baseline. Boots an inductiveautomation/ignition:8.3.6 gateway with the
+# inductive-automation/template-ignition-project resources bind-mounted in.
+# Used to verify file-config seeding works on 8.3.6 (the template was built for 8.3.2)
+# and to capture UI evidence for the "yes" rows in docs/ignition-seeding-matrix.md.
+x-ignition-common: &ignition-common
+  image: &ignition-image inductiveautomation/ignition:8.3.6
+
+x-ignition-environment: &ignition-environment
+  ACCEPT_IGNITION_EULA: "Y"
+  GATEWAY_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+  IGNITION_EDITION: standard
+  TZ: ${TZ:-UTC}
+
+services:
+  bootstrap:
+    image: *ignition-image
+    user: root
+    entrypoint: ["/bin/bash", "/docker-bootstrap.sh"]
+    environment:
+      GATEWAY_NAME: ${GATEWAY_NAME}
+    volumes:
+      - ignition-data:/data
+      - ./bootstrap.sh:/docker-bootstrap.sh:ro
+      # The template's resources are copied INTO ignition-data by bootstrap.sh
+      # (instead of bind-mounted into the gateway directly). The gateway needs
+      # to write .resources/ cache dirs inside those trees, which :ro mounts block.
+      - ${TEMPLATE_PATH}/services/ignition:/template-source:ro
+
+  gateway:
+    <<: [*ignition-common]
+    container_name: ${GATEWAY_NAME}
+    hostname: ${GATEWAY_NAME}
+    depends_on:
+      db:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    ports:
+      # Jetty binds to 8088 inside the container by default. The -h/-s/-a args
+      # below set the *public* address used to generate self-referential URLs;
+      # they don't change the bind port.
+      - "${GATEWAY_HTTP_PORT:-9088}:8088"
+    volumes:
+      - ignition-data:/usr/local/bin/ignition/data
+    environment:
+      <<: *ignition-environment
+    command: >
+      -n ${GATEWAY_NAME}
+      -m 2048
+      --
+      -Dignition.config.mode=dev
+
+  db:
+    image: postgres:18.1
+    hostname: db
+    container_name: db-${GATEWAY_NAME}
+    volumes:
+      - ${TEMPLATE_PATH}/services/db/init:/docker-entrypoint-initdb.d:ro
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "${DB_USER}"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  ignition-data:
