@@ -78,7 +78,9 @@ ROWS_TO_CAPTURE: dict[str, list[str]] = {
 
 def login(page: Page) -> bool:
     """Drive the two-step IDP login. Returns True on success."""
-    page.goto(urljoin(GATEWAY_URL, "/data/app/login"), wait_until="domcontentloaded", timeout=30_000)
+    page.goto(
+        urljoin(GATEWAY_URL, "/data/app/login"), wait_until="domcontentloaded", timeout=30_000
+    )
     page.wait_for_timeout(2500)
 
     if "/idp/" not in page.url:
