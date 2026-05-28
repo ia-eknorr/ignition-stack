@@ -1,0 +1,19 @@
+{{ bootstrap_service_name }}:
+  image: *ignition-image
+  user: root
+  entrypoint: ["/bin/bash", "/docker-bootstrap.sh"]
+  environment:
+    GATEWAY_NAME: {{ gateway_name_ref }}
+  volumes:
+    - {{ volume_name }}:/data
+    - ./scripts/docker-bootstrap.sh:/docker-bootstrap.sh:ro
+    - ./services/{{ template_source_dir }}:/template-source:ro
+{%- if cached_modules %}
+    - ./modules/cache:/modules-cache:ro
+{%- endif %}
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

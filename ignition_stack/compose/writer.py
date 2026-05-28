@@ -1,15 +1,21 @@
-"""Walking-skeleton project writer.
+"""Project tree writer.
 
-Phase 2 hardcodes a single profile (standalone+Postgres). The writer copies
-a static template tree from ``ignition_stack/templates/standalone-postgres/``
-into the target directory and produces a ``.env`` from
-:class:`~ignition_stack.config.schema.ProjectConfig`.
+The writer composes a generated project at ``<output>/<name>/`` by:
 
-Every file is written in binary with explicit ``\\n`` newlines so the output
-is byte-identical on Linux, macOS, and Windows. ``docker-bootstrap.sh`` in
-particular must be LF-only or bash inside the container chokes on CR bytes.
+1. Copying the static asset tree (``scripts/``, ``services/<dir>/``)
+   from the package's template payload, parametrised per-gateway when
+   the project has more than one.
+2. Rendering ``docker-compose.yaml`` through
+   :func:`ignition_stack.compose.engine.render_compose`, which preserves
+   YAML anchors via ruamel.yaml.
+3. Rendering ``.env`` from the resolved :class:`ProjectConfig`,
+   including per-gateway HTTP port entries when the project is
+   multi-gateway.
 
-Phase 4 generalizes this into the anchor-preserving Jinja2 + ruamel pipeline.
+Every file is written in binary with explicit ``\\n`` newlines so the
+output is byte-identical on Linux, macOS, and Windows.
+``docker-bootstrap.sh`` in particular must be LF-only or bash inside
+the container chokes on CR bytes.
 """
 
 from __future__ import annotations
@@ -18,10 +24,13 @@ from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
+from ignition_stack.catalog.loader import CatalogLoadError, load_catalog
+from ignition_stack.catalog.schema import Catalog
+from ignition_stack.compose.engine import render_compose
 from ignition_stack.config.schema import ProjectConfig
 
-_TEMPLATE_PACKAGE = "ignition_stack.templates"
-_TEMPLATE_PROFILE = "standalone-postgres"
+_STATIC_PACKAGE = "ignition_stack.templates"
+_STATIC_PROFILE = "standalone-postgres"
 
 
 def write_project(config: ProjectConfig, target_dir: Path) -> list[Path]:
@@ -40,39 +49,131 @@ def write_project(config: ProjectConfig, target_dir: Path) -> list[Path]:
 
     written: list[Path] = []
 
-    # Copy the static template tree verbatim. Walks the package-data tree so
-    # this works whether the install is editable or from a wheel.
-    template_root = _template_root()
-    for src_rel, content in _walk_template(template_root):
-        dst = target_dir / src_rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(content)
-        if src_rel.endswith("docker-bootstrap.sh"):
-            dst.chmod(0o755)
-        written.append(dst)
-
-    # Render the .env from the resolved config.
-    env_path = target_dir / ".env"
-    env_path.write_bytes(_render_env(config).encode("utf-8"))
-    written.append(env_path)
+    written.extend(_copy_static_tree(config, target_dir))
+    written.append(_write_compose(config, target_dir))
+    written.append(_write_env(config, target_dir))
 
     return written
 
 
-def _template_root() -> Traversable:
-    # Navigate from a parent package whose name is a valid Python identifier
-    # into the hyphenated profile directory. ``files()`` returns a Traversable
-    # that supports ``/`` even for non-identifier subpath segments.
-    return resources.files(_TEMPLATE_PACKAGE) / _TEMPLATE_PROFILE
+def _copy_static_tree(config: ProjectConfig, target_dir: Path) -> list[Path]:
+    """Copy the static portion of the project tree.
+
+    For a single-gateway project the scripts + services/ignition layout
+    is copied verbatim (Phase 2 walking skeleton). For multi-gateway
+    projects the services subtree is duplicated once per gateway under
+    ``services/<gateway-name>/`` so each bootstrap container can mount
+    its own template-source.
+    """
+    written: list[Path] = []
+    static_root = _static_root()
+
+    for src_rel, content, executable in _walk_template(static_root):
+        if src_rel == "docker-compose.yaml":
+            # The compose file is rendered separately by the engine; the
+            # bundled copy is only there to seed the byte-identical Phase
+            # 2 golden during development.
+            continue
+        if src_rel.startswith("services/"):
+            if config.is_multi_gateway:
+                for gw in config.gateways:
+                    fan_rel = src_rel.replace("services/ignition/", f"services/{gw.name}/", 1)
+                    written.append(_write_static(target_dir, fan_rel, content, executable))
+            else:
+                written.append(_write_static(target_dir, src_rel, content, executable))
+        else:
+            written.append(_write_static(target_dir, src_rel, content, executable))
+
+    return written
 
 
-def _walk_template(root: Traversable, prefix: str = "") -> list[tuple[str, bytes]]:
-    """Yield (relative-path, bytes) for every file under ``root``.
+def _write_static(target_dir: Path, rel: str, content: bytes, executable: bool) -> Path:
+    dst = target_dir / rel
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(content)
+    if executable:
+        dst.chmod(0o755)
+    return dst
+
+
+def _write_compose(config: ProjectConfig, target_dir: Path) -> Path:
+    catalog = _maybe_load_catalog(config)
+    rendered = render_compose(config, catalog=catalog)
+    dst = target_dir / "docker-compose.yaml"
+    dst.write_bytes(rendered.encode("utf-8"))
+    return dst
+
+
+def _maybe_load_catalog(config: ProjectConfig) -> Catalog | None:
+    """Load the bundled catalog only when a gateway actually needs it.
+
+    Saves a parse + I/O for the common module-free single-gateway case
+    and keeps test fixtures from needing modules.yaml to be reachable.
+    """
+    if not any(gw.modules for gw in config.gateways):
+        return None
+    try:
+        return load_catalog()
+    except CatalogLoadError as exc:
+        raise RuntimeError(
+            "modules referenced in project config but modules.yaml could not be loaded"
+        ) from exc
+
+
+def _write_env(config: ProjectConfig, target_dir: Path) -> Path:
+    env_path = target_dir / ".env"
+    env_path.write_bytes(_render_env(config).encode("utf-8"))
+    return env_path
+
+
+def _render_env(config: ProjectConfig) -> str:
+    """Render the project .env. Always LF-terminated, no Windows surprises."""
+    lines = [
+        "# Generated by ignition-stack. Edit values, do not delete keys.",
+        f"COMPOSE_PROJECT_NAME={config.name}",
+    ]
+    if not config.is_multi_gateway:
+        # Phase 2 walking-skeleton compatibility: a single shared
+        # GATEWAY_NAME / GATEWAY_HTTP_PORT pair the bootstrap + gateway
+        # services both reference.
+        gw = config.gateways[0]
+        lines += [
+            f"GATEWAY_NAME={config.name}",
+            f"GATEWAY_HTTP_PORT={gw.http_port}",
+        ]
+    else:
+        for gw in config.gateways:
+            lines.append(f"{gw.env_prefix}_HTTP_PORT={gw.http_port}")
+
+    lines += [
+        f"IGNITION_IMAGE={config.ignition_image}",
+    ]
+    if config.database is not None:
+        lines.append(f"POSTGRES_IMAGE={config.database.image}")
+    lines += [
+        f"ADMIN_USERNAME={config.admin_username}",
+        f"ADMIN_PASSWORD={config.admin_password}",
+    ]
+    if config.database is not None:
+        lines += [
+            f"DB_USER={config.database.user}",
+            f"DB_PASSWORD={config.database.password}",
+        ]
+    lines.append(f"TZ={config.timezone}")
+    return "\n".join(lines) + "\n"
+
+
+def _static_root() -> Traversable:
+    return resources.files(_STATIC_PACKAGE) / _STATIC_PROFILE
+
+
+def _walk_template(root: Traversable, prefix: str = "") -> list[tuple[str, bytes, bool]]:
+    """Yield (relative-path, bytes, executable) for every file under ``root``.
 
     Skips Python package markers (``__init__.py``) and any pyc artifacts so
     the generated project doesn't contain Python plumbing.
     """
-    out: list[tuple[str, bytes]] = []
+    out: list[tuple[str, bytes, bool]] = []
     for entry in sorted(root.iterdir(), key=lambda e: e.name):
         name = entry.name
         rel = f"{prefix}{name}"
@@ -81,23 +182,5 @@ def _walk_template(root: Traversable, prefix: str = "") -> list[tuple[str, bytes
             continue
         if name == "__init__.py" or name.endswith(".pyc"):
             continue
-        out.append((rel, entry.read_bytes()))
+        out.append((rel, entry.read_bytes(), rel.endswith("docker-bootstrap.sh")))
     return out
-
-
-def _render_env(config: ProjectConfig) -> str:
-    """Render the project .env. Always LF-terminated, no Windows surprises."""
-    lines = [
-        "# Generated by ignition-stack. Edit values, do not delete keys.",
-        f"COMPOSE_PROJECT_NAME={config.name}",
-        f"GATEWAY_NAME={config.name}",
-        f"GATEWAY_HTTP_PORT={config.gateway_http_port}",
-        f"IGNITION_IMAGE={config.ignition_image}",
-        f"POSTGRES_IMAGE={config.postgres_image}",
-        f"ADMIN_USERNAME={config.admin_username}",
-        f"ADMIN_PASSWORD={config.admin_password}",
-        f"DB_USER={config.db_user}",
-        f"DB_PASSWORD={config.db_password}",
-        f"TZ={config.timezone}",
-    ]
-    return "\n".join(lines) + "\n"

@@ -1,0 +1,19 @@
+{{ name }}:
+  image: ${POSTGRES_IMAGE}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    POSTGRES_USER: ${DB_USER}
+    POSTGRES_PASSWORD: ${DB_PASSWORD}
+  healthcheck:
+    test: ["CMD", "pg_isready", "-h", "localhost", "-U", "${DB_USER}"]
+    interval: 5s
+    timeout: 10s
+    retries: 10
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

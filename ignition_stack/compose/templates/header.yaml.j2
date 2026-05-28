@@ -1,0 +1,14 @@
+{%- for line in description_lines %}
+# {{ line }}
+{%- endfor %}
+x-ignition-common: &ignition-common
+  image: &ignition-image ${IGNITION_IMAGE}
+
+x-ignition-environment: &ignition-environment
+  ACCEPT_IGNITION_EULA: "Y"
+  GATEWAY_ADMIN_USERNAME: ${ADMIN_USERNAME}
+  GATEWAY_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+  IGNITION_EDITION: standard
+  TZ: ${TZ}
+
+services:

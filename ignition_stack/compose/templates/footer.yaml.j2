@@ -1,0 +1,12 @@
+volumes:
+{%- for vol in volumes %}
+  {{ vol }}:
+{%- endfor %}
+{%- if networks %}
+
+networks:
+{%- for net in networks %}
+  {{ net }}:
+    driver: bridge
+{%- endfor %}
+{%- endif %}

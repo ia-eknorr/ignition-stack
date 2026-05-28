@@ -1,0 +1,36 @@
+{{ service_name }}:
+  <<: [*ignition-common]
+  container_name: {{ gateway_name_ref }}
+  hostname: {{ gateway_name_ref }}
+  depends_on:
+{%- if database_service %}
+    {{ database_service }}:
+      condition: service_healthy
+{%- endif %}
+    {{ bootstrap_service_name }}:
+      condition: service_completed_successfully
+  ports:
+    - "{{ port_ref }}:8088"
+  volumes:
+    - {{ volume_name }}:/usr/local/bin/ignition/data
+  environment:
+    <<: *ignition-environment
+{%- if edition_override %}
+    IGNITION_EDITION: {{ edition_override }}
+{%- endif %}
+{%- if module_identifiers %}
+    GATEWAY_MODULES_ENABLED: "{{ module_identifiers }}"
+    ACCEPT_MODULE_LICENSES: "{{ module_identifiers }}"
+    ACCEPT_MODULE_CERTS: "{{ module_identifiers }}"
+{%- endif %}
+  command: >
+    -n {{ gateway_name_ref }}
+    -m {{ memory_mb }}
+    --
+    -Dignition.config.mode=dev
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}
