@@ -4,10 +4,31 @@
 
 ## The pipeline
 
-1. The CLI builds a `ProjectConfig` (name, gateways, database, network topology, modules).
-2. The writer copies the static asset tree (`scripts/docker-bootstrap.sh`, per-gateway `services/<name>/` resource directories).
-3. The compose engine renders `docker-compose.yaml` from a static anchor header, per-service Jinja2 fragments, and a footer that declares volumes (and networks when the split is opted into).
-4. The writer renders `.env` from the resolved config, including per-gateway HTTP-port keys for multi-gateway projects.
+1. The CLI builds a `ProjectConfig` (name, gateways, database, services, network topology, modules).
+2. The dependency resolver expands implicit needs (see below) into a fully-resolved config.
+3. The writer copies the static asset tree (`scripts/docker-bootstrap.sh`, per-gateway `services/<name>/` resource directories) and overlays each service's seeds.
+4. The compose engine renders `docker-compose.yaml` from a static anchor header, per-service Jinja2 fragments, and a footer that declares volumes (and networks when the split is opted into).
+5. The writer renders `.env` from the resolved config, including per-gateway HTTP-port keys for multi-gateway projects and each service's preset credentials.
+
+## The service catalog
+
+Every supported service is a self-contained directory under `templates/services/<name>/`:
+
+- `manifest.yaml` declares the image (and the `.env` key that overrides it), the capabilities the service `provides` and `requires`, its preset `.env` credentials, and which connections it cannot file-seed and defers to `POST-SETUP.md`.
+- `compose.yaml.j2` is the service's compose fragment, rendered with a small context (image reference, container name, networks, dependencies).
+- `seed/service/` is copied into `services/<name>/` and mounted into the service's own container (a Postgres initdb script, a Keycloak realm export, a broker config).
+- `seed/gateway-resources/` is overlaid onto every gateway's `config/resources/` tree, so a service can pre-seed a file-seedable gateway connection. Postgres uses this to ship a working `db-connection` plus the `internal-secret-provider` that holds its password, per the Phase-1 seedability matrix.
+
+Adding a service is a data change: drop a new directory in, and the engine, the `.env` writer, and the seed copier pick it up with no code change.
+
+## The dependency resolver
+
+`services.resolver.resolve()` is a pure transformation run before anything renders. It expands two kinds of rule:
+
+- **Declarative** capability chains from each manifest's `requires`. Keycloak `requires: [sql-database]`, so selecting Keycloak with no database auto-adds Postgres (and a dedicated `keycloak` logical database created on first init).
+- **Imperative** couplings: a MySQL database attaches the `mysql-jdbc` driver to every gateway so the connector `.jar` lands in `user-lib/jdbc/`.
+
+The engine renders the resolved config verbatim and never adds or re-resolves services at render time, which keeps the resolution rules testable in isolation.
 
 ## Why a hybrid engine
 
@@ -39,9 +60,11 @@ Modules attached to a gateway append `GATEWAY_MODULES_ENABLED`, `ACCEPT_MODULE_L
 
 Every supported combination has a golden snapshot under `tests/golden/<profile>/`. Engine changes that affect output text fail the test with a unified diff; an intentional change is committed by re-running the suite with `UPDATE_GOLDENS=1`.
 
-Phase 4 ships two goldens:
+The goldens cover:
 
 - `standalone-postgres/` - the Phase 2 walking skeleton (regression contract).
 - `scaleout-skeleton/` - two gateways (frontend + backend), network split, frontend running Edge with the `mqtt-engine` module attached.
+- `services/<name>/` - one minimal snapshot per catalog service (and per database kind).
+- `combos/` - key combinations: the smoke stack (Postgres + HiveMQ + OPC-UA-sim) and a network-split stack.
 
-Phase 5 will add per-service goldens as the service catalog lands.
+The multi-service `docker compose up` smoke lives behind a `smoke` pytest marker (`pytest -m smoke`); the default run stays fast.
