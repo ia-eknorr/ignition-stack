@@ -57,9 +57,11 @@ def render_compose(
 
     ``catalog`` is required when any gateway lists modules; the engine
     looks up each module's fully-qualified identifier and emits the
-    ``GATEWAY_MODULES_ENABLED`` / ``ACCEPT_MODULE_LICENSES`` /
-    ``ACCEPT_MODULE_CERTS`` env vars per the resolved q-module-install
-    finding. Pass ``None`` for module-free stacks.
+    ``ACCEPT_MODULE_LICENSES`` / ``ACCEPT_MODULE_CERTS`` env vars per the
+    resolved q-module-install finding. ``GATEWAY_MODULES_ENABLED`` is
+    deliberately omitted: the Phase-1 matrix found it acts as a strict
+    whitelist that quarantines the built-in IA modules (OPC-UA, SQL
+    Historian, ...). Pass ``None`` for module-free stacks.
 
     Returns LF-terminated text suitable for writing to disk.
     """

@@ -42,16 +42,20 @@ if [ ! -f "${DATA_DIR}/.ignition-seed-complete" ]; then
     cp -R "${TEMPLATE_SRC}/projects/." "${DATA_DIR}/projects/"
   fi
 
-  # Drop any cached third-party .modl files into the gateway's modules
-  # directory. The compose engine mounts <project>/modules/cache to
-  # /modules-cache:ro for any gateway that lists modules; gateways
-  # without modules skip this block harmlessly. The companion env vars
-  # (GATEWAY_MODULES_ENABLED + ACCEPT_MODULE_* on the gateway service)
-  # tell Ignition to auto-load them on boot.
+  # Drop any cached artifacts from the modules cache into the gateway.
+  # The compose engine mounts <project>/modules/cache to /modules-cache:ro
+  # for any gateway that lists modules or JDBC drivers; gateways without
+  # any skip this block harmlessly. Third-party .modl files go to
+  # user-lib/modules (the companion ACCEPT_MODULE_* env vars on the gateway
+  # service tell Ignition to trust + load them on boot); JDBC .jar drivers
+  # go to user-lib/jdbc where the gateway's driver configs expect them.
   if [ -d "/modules-cache" ]; then
-    echo "Dropping cached modules from /modules-cache -> ${DATA_DIR}/user-lib/modules"
+    echo "Dropping cached .modl modules from /modules-cache -> ${DATA_DIR}/user-lib/modules"
     mkdir -p "${DATA_DIR}/user-lib/modules"
     cp /modules-cache/*.modl "${DATA_DIR}/user-lib/modules/" 2>/dev/null || true
+    echo "Dropping cached .jar drivers from /modules-cache -> ${DATA_DIR}/user-lib/jdbc"
+    mkdir -p "${DATA_DIR}/user-lib/jdbc"
+    cp /modules-cache/*.jar "${DATA_DIR}/user-lib/jdbc/" 2>/dev/null || true
   fi
 
   # Hand ownership of everything in /data to the ignition user (uid 2003)

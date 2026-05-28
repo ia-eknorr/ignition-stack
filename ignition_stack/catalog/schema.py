@@ -7,9 +7,9 @@ both `modules` subcommand time and `init` time.
 
 Two entry kinds: third-party Ignition modules (.modl) and JDBC drivers
 (.jar). They are distinct shapes because Phase 1 confirmed the module
-auto-load env vars (`GATEWAY_MODULES_ENABLED`, `ACCEPT_MODULE_LICENSES`,
-`ACCEPT_MODULE_CERTS`) take **fully-qualified module identifiers, not
-paths** - while the volume-mount needs the in-container install path.
+accept env vars (`ACCEPT_MODULE_LICENSES`, `ACCEPT_MODULE_CERTS`) take
+**fully-qualified module identifiers, not paths** - while the
+volume-mount needs the in-container install path.
 JDBC drivers have no identifier and no accept-license env vars; they
 are simply files in `user-lib/jdbc/`.
 
@@ -123,8 +123,7 @@ class ModuleEntry(_EntryBase):
             description=(
                 "Fully-qualified module identifier (e.g. "
                 "'com.cirruslink.mqtt.engine.gateway'). Used verbatim in "
-                "GATEWAY_MODULES_ENABLED, ACCEPT_MODULE_LICENSES, and "
-                "ACCEPT_MODULE_CERTS. NOT a path."
+                "ACCEPT_MODULE_LICENSES and ACCEPT_MODULE_CERTS. NOT a path."
             ),
         ),
     ]

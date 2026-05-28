@@ -40,7 +40,6 @@ services:
     environment:
       <<: *ignition-environment
       IGNITION_EDITION: edge
-      GATEWAY_MODULES_ENABLED: "com.cirruslink.mqtt.engine.gateway"
       ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.engine.gateway"
       ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.engine.gateway"
     command: >

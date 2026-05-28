@@ -54,9 +54,9 @@ class GatewayConfig(BaseModel):
         description=(
             "Module catalog entry names (slugs) to attach to this gateway. "
             "The compose engine wires each cached .modl into the gateway "
-            "volume AND enumerates it in GATEWAY_MODULES_ENABLED + "
-            "ACCEPT_MODULE_LICENSES + ACCEPT_MODULE_CERTS per the resolved "
-            "q-module-install finding."
+            "volume AND enumerates it in ACCEPT_MODULE_LICENSES + "
+            "ACCEPT_MODULE_CERTS per the resolved q-module-install finding "
+            "(GATEWAY_MODULES_ENABLED is omitted - it quarantines built-ins)."
         ),
     )
 
