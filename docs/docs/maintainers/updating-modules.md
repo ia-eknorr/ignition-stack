@@ -1,8 +1,11 @@
-# Updating module versions (maintainer guide)
+---
+title: Updating module versions
+description: Bump a third-party module or JDBC driver for a new Ignition release with one edit in modules.yaml.
+---
 
-Stub. Phase 8 expands this into the full Docusaurus page. For now, the
-authoritative reference is `modules.yaml` at the repo root and the schema
-docstring in `ignition_stack/catalog/schema.py`.
+# Updating module versions
+
+Every third-party module and JDBC driver the CLI knows how to download, verify, and wire into a stack lives in one file: `modules.yaml` at the repo root. It is the single source of truth a maintainer bumps per Ignition release, validated against the `Catalog` schema in `ignition_stack/catalog/schema.py` at load. Bumping a module is a data edit to that file; you never touch engine code.
 
 ## Bumping an entry for a new Ignition release
 

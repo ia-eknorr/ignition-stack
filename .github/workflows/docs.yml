@@ -1,0 +1,48 @@
+name: docs
+
+# Validates the documentation site: the generated CLI reference must match the
+# live Typer command tree, and the site must build with no broken links.
+# Deploying the built site to GitHub Pages is wired up separately.
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "ignition_stack/**"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "ignition_stack/**"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  cli-reference:
+    name: CLI reference drift + page presence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Drift, coverage, and page-presence checks
+        run: uv run --extra dev pytest tests/test_docs_cli_reference.py
+
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci
+      - run: npm run build

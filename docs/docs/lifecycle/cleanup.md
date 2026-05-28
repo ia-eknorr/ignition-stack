@@ -49,4 +49,4 @@ To resolve the project name, `wipe` prefers an SE-demo project's recorded config
 
 ## What survives a wipe
 
-A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. For an SE-demo project the `.ignition-stack/` record survives too; pair `wipe` with [`reset`](lifecycle-modes.md) to return to a clean baseline between customer sessions without re-walking the wizard.
+A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. For an SE-demo project the `.ignition-stack/` record survives too; pair `wipe` with [`reset`](./modes.md) to return to a clean baseline between customer sessions without re-walking the wizard.
