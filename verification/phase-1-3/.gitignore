@@ -1,0 +1,6 @@
+# Everything in this directory except the README, the harness script, and
+# this .gitignore is harness scratch — recreated on every `run-test.sh` run.
+.venv/
+results.log
+.tmp.*
+generated/

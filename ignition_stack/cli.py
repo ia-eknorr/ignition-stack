@@ -22,7 +22,6 @@ app = typer.Typer(
     name="ignition-stack",
     help="Generate ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos.",
     add_completion=False,
-    no_args_is_help=True,
     rich_markup_mode="rich",
 )
 app.add_typer(modules_app, name="modules")
@@ -30,8 +29,14 @@ app.add_typer(modules_app, name="modules")
 console = Console()
 
 
-@app.callback()
+# invoke_without_command=True lets the eager --version handler fire on bare
+# `ignition-stack --version`. Typer's `no_args_is_help` short-circuits the
+# callback when no subcommand is given, which swallowed --version and made
+# it look like the command was missing; handling the "no subcommand" case
+# manually here keeps both behaviours: --version prints, bare call shows help.
+@app.callback(invoke_without_command=True)
 def _root(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -41,6 +46,9 @@ def _root(
 ) -> None:
     if version:
         console.print(f"ignition-stack {__version__}")
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        console.print(ctx.get_help())
         raise typer.Exit()
 
 
