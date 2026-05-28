@@ -132,16 +132,15 @@ def test_bootstrap_script_is_executable(runner: CliRunner, tmp_path: Path) -> No
     assert mode & 0o100, f"docker-bootstrap.sh is not user-executable (mode={oct(mode)})"
 
 
-@pytest.mark.parametrize(
-    "command",
-    ["reset", "wipe"],
-)
-def test_placeholder_commands_exit_non_zero(runner: CliRunner, command: str) -> None:
-    """Phase-7 lifecycle commands are visible but explicitly not-yet-implemented.
+def test_lifecycle_commands_are_implemented(runner: CliRunner) -> None:
+    """The phase-7 lifecycle commands are real now, not placeholders.
 
-    ``modules`` was a phase-2 placeholder; phase 3 replaced it with the real
-    sub-app (see tests/test_modules_cli.py).
+    ``modules`` became a sub-app in phase 3; ``reset``/``wipe``/``switch-profile``
+    got their implementations in phase 7 (see tests/test_lifecycle.py for
+    behaviour). Here we only assert they no longer advertise themselves as
+    unimplemented, so the phase-2 placeholder contract is gone for good.
     """
-    result = runner.invoke(app, [command])
-    assert result.exit_code == 2, result.stdout
-    assert "not yet implemented" in result.stdout.lower()
+    for command in ("reset", "wipe", "switch-profile"):
+        help_result = runner.invoke(app, [command, "--help"])
+        assert help_result.exit_code == 0, help_result.stdout
+        assert "not yet implemented" not in help_result.stdout.lower()

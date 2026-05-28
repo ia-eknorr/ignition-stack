@@ -1,0 +1,11 @@
+## Configure the Kafka connector
+
+{{ reason }}
+
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> Kafka -> Connectors -> Create new Kafka connector, and
+  point its bootstrap servers at `kafka:9092`.
+- **Copy from `.env`:**
+{%- for key, value in env_vars %}
+  - `{{ key }}` = `{{ value }}`
+{%- endfor %}

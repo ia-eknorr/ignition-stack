@@ -12,6 +12,7 @@ interactive wizard when no profile is named.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import typer
@@ -21,6 +22,16 @@ from ignition_stack import __version__
 from ignition_stack.commands.modules import modules_app
 from ignition_stack.compose import write_project
 from ignition_stack.config import ProjectConfig
+from ignition_stack.lifecycle import (
+    LIFECYCLE_DIR,
+    RECORD_NAME,
+    CleanupError,
+    LifecycleError,
+    project_name,
+    read_record,
+    wipe_command,
+)
+from ignition_stack.lifecycle.regenerate import regenerate
 from ignition_stack.profiles import (
     ProfileError,
     ProfileOptions,
@@ -105,6 +116,16 @@ def init(
             "'gateway', ...) to opt that specific role in."
         ),
     ),
+    keep_cli: bool = typer.Option(
+        False,
+        "--keep-cli",
+        help=(
+            "SE-demo mode: keep the lifecycle primitives in .ignition-stack/ so "
+            "`ignition-stack reset` / `switch-profile` can regenerate the project. "
+            "The default (one-shot) leaves a self-contained project with no CLI "
+            "primitives behind."
+        ),
+    ),
     output_dir: Path | None = typer.Option(  # noqa: B008 - Typer pattern
         None,
         "--output-dir",
@@ -134,12 +155,13 @@ def init(
         config = _build_from_profile(name, profile, spokes, force, edge_role)
 
     try:
-        files = write_project(config, target)
+        files = write_project(config, target, keep_cli=keep_cli)
     except FileExistsError as exc:
         console.print(f"[red]error[/red]: {exc}")
         raise typer.Exit(code=1) from exc
 
-    console.print(f"[green]created[/green] {target}")
+    mode = "SE-demo" if keep_cli else "one-shot"
+    console.print(f"[green]created[/green] {target} ([cyan]{mode}[/cyan])")
     console.print(f"  {len(files)} file(s) written")
     console.print()
     console.print("Next steps:")
@@ -148,6 +170,12 @@ def init(
     console.print(
         f"  open http://localhost:{config.gateways[0].http_port}  (admin / {config.admin_password})"
     )
+    if keep_cli:
+        console.print()
+        console.print(
+            f"  primitives kept in {LIFECYCLE_DIR}/ - run `ignition-stack reset` to "
+            "regenerate or `switch-profile <name>` to reshape this stack."
+        )
 
 
 def _build_from_profile(
@@ -185,23 +213,135 @@ def _run_wizard_or_exit(name: str) -> ProjectConfig:
 
 
 @app.command()
-def reset() -> None:
-    """Reset a generated project to a clean baseline. (placeholder; arrives in Phase 7)"""
-    console.print(
-        "[yellow]ignition-stack reset[/yellow] is not yet implemented. "
-        "Arrives in Phase 7 (lifecycle modes)."
+def reset(
+    project_dir: Path = typer.Option(  # noqa: B008 - Typer pattern
+        Path("."),
+        "--project-dir",
+        "-C",
+        help="The generated SE-demo project to reset. Defaults to the current directory.",
+    ),
+) -> None:
+    """Regenerate an SE-demo project from its recorded config.
+
+    Reads ``.ignition-stack/config.json``, clears the generated tree (keeping the
+    record and the modules cache), and re-runs generation. Only works on SE-demo
+    projects (``init --keep-cli``); a one-shot project has no record to reset from.
+    """
+    project_dir = project_dir.resolve()
+    try:
+        config = read_record(project_dir)
+    except LifecycleError as exc:
+        console.print(f"[red]error[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    files = regenerate(project_dir, config)
+    console.print(f"[green]reset[/green] {project_dir}")
+    console.print(f"  {len(files)} file(s) regenerated from {LIFECYCLE_DIR}/{RECORD_NAME}")
+
+
+@app.command(name="switch-profile")
+def switch_profile(
+    profile: str = typer.Argument(..., help="Architecture profile to switch this stack to."),
+    project_dir: Path = typer.Option(  # noqa: B008 - Typer pattern
+        Path("."),
+        "--project-dir",
+        "-C",
+        help="The generated SE-demo project to reshape. Defaults to the current directory.",
+    ),
+) -> None:
+    """Reshape an SE-demo project under a different architecture profile.
+
+    Carries the recorded database, services, reverse-proxy, and edge intent over
+    to the new profile, then regenerates in place and re-records the result.
+    """
+    project_dir = project_dir.resolve()
+    try:
+        current = read_record(project_dir)
+    except LifecycleError as exc:
+        console.print(f"[red]error[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    try:
+        get_profile(profile)
+    except KeyError as exc:
+        console.print(f"[red]error[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    options = _options_from_config(current)
+    try:
+        new_config = build_profile(profile, current.name, options)
+    except ProfileError as exc:
+        console.print(f"[red]advisory[/red]: {exc}")
+        raise typer.Exit(code=3) from exc
+    except ValueError as exc:
+        console.print(f"[red]error[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    files = regenerate(project_dir, new_config)
+    console.print(f"[green]switched[/green] {current.profile or 'custom'} -> {profile}")
+    console.print(f"  {len(files)} file(s) regenerated")
+
+
+def _options_from_config(config: ProjectConfig) -> ProfileOptions:
+    """Recover the profile inputs a switch should carry over from a recorded config.
+
+    Edge intent is recovered from whichever gateway runs the Edge edition (or
+    'none' to keep the new profile from re-introducing its edge default); the
+    spoke count from the number of spoke-role gateways.
+    """
+    edge_roles = [gw.role or gw.name for gw in config.gateways if gw.ignition_edition == "edge"]
+    spoke_count = sum(1 for gw in config.gateways if (gw.role or "") == "spoke")
+    return ProfileOptions(
+        spokes=spoke_count or 3,
+        edge_role=edge_roles[0] if edge_roles else "none",
+        reverse_proxy=config.reverse_proxy,
+        database_kind=config.database.kind if config.database else None,
+        services=tuple(config.services),
     )
-    raise typer.Exit(code=2)
 
 
 @app.command()
-def wipe() -> None:
-    """Remove this project's containers and volumes. (placeholder; arrives in Phase 7)"""
-    console.print(
-        "[yellow]ignition-stack wipe[/yellow] is not yet implemented. "
-        "Arrives in Phase 7 (lifecycle modes)."
-    )
-    raise typer.Exit(code=2)
+def wipe(
+    project_dir: Path = typer.Option(  # noqa: B008 - Typer pattern
+        Path("."),
+        "--project-dir",
+        "-C",
+        help="The generated project to wipe. Defaults to the current directory.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print the scoped teardown command without running it.",
+    ),
+) -> None:
+    """Remove only this project's containers, networks, and volumes.
+
+    Runs ``docker compose -p <project> down -v --remove-orphans``; the ``-p``
+    pin scopes the teardown to resources labelled with this compose project, so
+    unrelated Docker resources on the host are never touched.
+    """
+    project_dir = project_dir.resolve()
+    try:
+        name = project_name(project_dir)
+    except CleanupError as exc:
+        console.print(f"[red]error[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    command = wipe_command(name)
+    if dry_run:
+        console.print(" ".join(command))
+        return
+
+    try:
+        completed = subprocess.run(command, cwd=project_dir, check=False)
+    except FileNotFoundError as exc:
+        console.print("[red]error[/red]: docker not found on PATH; cannot wipe.")
+        raise typer.Exit(code=1) from exc
+
+    if completed.returncode != 0:
+        console.print(f"[red]error[/red]: `{' '.join(command)}` exited {completed.returncode}")
+        raise typer.Exit(code=completed.returncode)
+    console.print(f"[green]wiped[/green] project '{name}'")
 
 
 if __name__ == "__main__":  # pragma: no cover

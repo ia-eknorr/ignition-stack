@@ -1,0 +1,11 @@
+## Confirm the OPC-UA connection ({{ service }})
+
+{{ reason }}
+
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> OPC Connections -> Servers, then open the seeded OPC-UA
+  connection and confirm its endpoint URL and security mode against the running simulator.
+- **Copy from `.env`:**
+{%- for key, value in env_vars %}
+  - `{{ key }}` = `{{ value }}`
+{%- endfor %}
