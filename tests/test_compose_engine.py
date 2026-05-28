@@ -274,6 +274,48 @@ def test_duplicate_gateway_names_rejected() -> None:
         )
 
 
+def test_writer_creates_modules_cache_when_any_gateway_has_modules(
+    tmp_path: Path,
+) -> None:
+    """The bootstrap binds-mounts modules/cache; the dir must exist before `up`."""
+    from ignition_stack.compose.writer import write_project
+
+    config = ProjectConfig(
+        name="with-modules",
+        gateways=[GatewayConfig(modules=["mqtt-engine"])],
+    )
+    write_project(config, tmp_path / "with-modules")
+    cache_dir = tmp_path / "with-modules" / "modules" / "cache"
+    assert cache_dir.is_dir(), "modules/cache/ must be created when any gateway has modules"
+
+
+def test_writer_skips_modules_cache_when_no_gateway_has_modules(tmp_path: Path) -> None:
+    """Module-free stacks should not create the modules/cache scaffolding."""
+    from ignition_stack.compose.writer import write_project
+
+    write_project(ProjectConfig(name="plain"), tmp_path / "plain")
+    assert not (tmp_path / "plain" / "modules").exists()
+
+
+def test_bootstrap_script_drops_cached_modules_into_user_lib() -> None:
+    """The bootstrap script copies /modules-cache/*.modl into the gateway volume.
+
+    Without this, the GATEWAY_MODULES_ENABLED env var references modules
+    Ignition can't find on the filesystem. The two halves are paired by
+    the resolved q-module-install finding.
+    """
+    from pathlib import Path as _P
+
+    # Read the vendored bootstrap script directly so we assert against the
+    # source-of-truth artifact, not an indirect rendering.
+    script = (
+        _P("ignition_stack/templates/standalone-postgres/scripts/docker-bootstrap.sh")
+        .read_text(encoding="utf-8")
+    )
+    assert "/modules-cache" in script, "bootstrap must check for /modules-cache mount"
+    assert "user-lib/modules" in script, "bootstrap must drop modules into user-lib/modules"
+
+
 def test_database_kind_other_than_postgres_rejected() -> None:
     """Phase 4 ships postgres only; mysql/mongo arrive with the Phase 5 service catalog."""
     with pytest.raises(ValueError, match="postgres only"):

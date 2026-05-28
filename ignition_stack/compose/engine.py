@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import io
 import textwrap
-from importlib import resources
 from typing import TYPE_CHECKING
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
@@ -312,16 +311,3 @@ def _round_trip(raw: str) -> str:
     return out.getvalue()
 
 
-def _ensure_catalog_loadable() -> None:
-    # Import-time sanity: the package layout above requires the templates
-    # to be discoverable via importlib.resources. Fail loudly if a wheel
-    # is missing them (rather than getting a confusing TemplateNotFound
-    # at first render).
-    if not resources.files("ignition_stack.compose").joinpath("templates").is_dir():
-        raise RuntimeError(
-            "ignition_stack/compose/templates is not packaged; "
-            "check pyproject.toml force-include or wheel build"
-        )
-
-
-_ensure_catalog_loadable()

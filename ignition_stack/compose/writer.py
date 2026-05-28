@@ -50,10 +50,24 @@ def write_project(config: ProjectConfig, target_dir: Path) -> list[Path]:
     written: list[Path] = []
 
     written.extend(_copy_static_tree(config, target_dir))
+    _ensure_modules_cache_dir(config, target_dir)
     written.append(_write_compose(config, target_dir))
     written.append(_write_env(config, target_dir))
 
     return written
+
+
+def _ensure_modules_cache_dir(config: ProjectConfig, target_dir: Path) -> None:
+    """Create an empty modules/cache/ when any gateway lists modules.
+
+    The compose engine emits a bind mount of this directory into every
+    gateway's bootstrap container; absent the directory, `docker compose
+    up` fails before the bootstrap runs. The directory stays empty here
+    - `ignition-stack modules download` (Phase 3) populates it.
+    """
+    if not any(gw.modules for gw in config.gateways):
+        return
+    (target_dir / "modules" / "cache").mkdir(parents=True, exist_ok=True)
 
 
 def _copy_static_tree(config: ProjectConfig, target_dir: Path) -> list[Path]:

@@ -42,6 +42,18 @@ if [ ! -f "${DATA_DIR}/.ignition-seed-complete" ]; then
     cp -R "${TEMPLATE_SRC}/projects/." "${DATA_DIR}/projects/"
   fi
 
+  # Drop any cached third-party .modl files into the gateway's modules
+  # directory. The compose engine mounts <project>/modules/cache to
+  # /modules-cache:ro for any gateway that lists modules; gateways
+  # without modules skip this block harmlessly. The companion env vars
+  # (GATEWAY_MODULES_ENABLED + ACCEPT_MODULE_* on the gateway service)
+  # tell Ignition to auto-load them on boot.
+  if [ -d "/modules-cache" ]; then
+    echo "Dropping cached modules from /modules-cache -> ${DATA_DIR}/user-lib/modules"
+    mkdir -p "${DATA_DIR}/user-lib/modules"
+    cp /modules-cache/*.modl "${DATA_DIR}/user-lib/modules/" 2>/dev/null || true
+  fi
+
   # Hand ownership of everything in /data to the ignition user (uid 2003)
   # so the gateway can write its .resources/ caches and any UI-driven changes.
   chown -R 2003:2003 "${DATA_DIR}"
