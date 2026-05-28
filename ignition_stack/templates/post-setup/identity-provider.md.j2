@@ -1,0 +1,13 @@
+## Finish the OIDC identity provider (Keycloak)
+
+{{ reason }}
+
+- **Open Keycloak:** http://localhost:{{ env_map['KEYCLOAK_HTTP_PORT'] }}
+  (admin console -> Clients -> `ignition-gateway` -> Credentials -> copy the client secret)
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> Security -> Identity Providers, then add/edit the OIDC IdP.
+- **Copy from `.env`:**
+{%- for key, value in env_vars %}
+  - `{{ key }}` = `{{ value }}`
+{%- endfor %}
+- Paste the client secret you copied from Keycloak into the gateway IdP's **Client Secret** field.

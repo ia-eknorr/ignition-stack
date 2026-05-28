@@ -1,0 +1,12 @@
+## Finish the {{ connection.replace('-', ' ') }} connection
+
+{{ reason }}
+
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> Connections, then open the `{{ connection }}` entry.
+{%- if env_vars %}
+- **Copy from `.env`:**
+{%- for key, value in env_vars %}
+  - `{{ key }}` = `{{ value }}`
+{%- endfor %}
+{%- endif %}

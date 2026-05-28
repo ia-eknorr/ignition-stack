@@ -1,0 +1,11 @@
+## Link the gateway to the MQTT broker ({{ service }})
+
+{{ reason }}
+
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> MQTT Engine -> Servers -> Settings (use MQTT Transmission
+  on an edge gateway instead), then add an MQTT server pointing at `{{ service }}`.
+- **Copy from `.env`:**
+{%- for key, value in env_vars %}
+  - `{{ key }}` = `{{ value }}`
+{%- endfor %}

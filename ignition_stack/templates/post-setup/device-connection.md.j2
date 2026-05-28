@@ -1,0 +1,11 @@
+## Set up the device connection ({{ service }})
+
+{{ reason }}
+
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> Device Connections -> Devices -> Create new Device, choose
+  the Modbus TCP driver, and point it at `{{ service }}` once the simulator is reachable.
+- **Copy from `.env`:**
+{%- for key, value in env_vars %}
+  - `{{ key }}` = `{{ value }}`
+{%- endfor %}

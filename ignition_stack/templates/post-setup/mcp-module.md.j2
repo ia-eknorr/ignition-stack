@@ -1,0 +1,11 @@
+## Drop in the Ignition MCP module
+
+{{ reason }}
+
+- **Request the module:** https://inductiveautomation.com/early-access (Ignition MCP,
+  Early-Access).
+- **Drop the file here:** `{{ dropin_dir }}/<filename>.modl`
+- Re-run `docker compose up -d`; the bootstrap copies any `.modl` in the drop-in dir
+  into the gateway's `user-lib/modules/` on startup.
+- **Open the gateway UI:** {{ gateway_url }}
+- **Navigate to:** Config -> Modules to confirm the MCP module loaded.
