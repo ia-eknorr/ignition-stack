@@ -64,3 +64,9 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The multi-service compose smoke pulls images and boots a real gateway, so it
+# is opt-in: run it with `pytest -m smoke` (CI Phase 9 + manual verification).
+addopts = "-m 'not smoke'"
+markers = [
+  "smoke: end-to-end docker compose up smoke test (slow; requires Docker + Playwright)",
+]

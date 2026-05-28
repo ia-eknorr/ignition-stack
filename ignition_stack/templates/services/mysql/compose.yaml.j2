@@ -1,0 +1,26 @@
+{{ name }}:
+  image: ${MYSQL_IMAGE}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    MYSQL_DATABASE: ${DB_USER}
+    MYSQL_USER: ${DB_USER}
+    MYSQL_PASSWORD: ${DB_PASSWORD}
+{%- if extra_databases %}
+    EXTRA_DATABASES: ${EXTRA_DATABASES}
+  volumes:
+    - ./services/{{ name }}/initdb:/docker-entrypoint-initdb.d:ro
+{%- endif %}
+  healthcheck:
+    test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+    interval: 5s
+    timeout: 10s
+    retries: 10
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

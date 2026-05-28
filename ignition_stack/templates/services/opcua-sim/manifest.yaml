@@ -1,0 +1,21 @@
+# OPC-UA simulation server - Microsoft OPC-PLC, the mainstream containerized
+# OPC-UA test server (Prosys ships no Docker image). Anonymous, unsecured
+# endpoint suitable for demos.
+name: opcua-sim
+kind: simulator
+summary: Microsoft OPC-PLC OPC-UA simulation server.
+image: mcr.microsoft.com/iotedge/opc-plc:2.9.9
+image_env: OPCUA_SIM_IMAGE
+network: backend
+provides:
+  - opcua-server
+requires: []
+env:
+  OPCUA_SIM_PORT: "50000"
+seeds_gateway_resources: false
+post_setup:
+  - connection: opc-ua-connection
+    reason: >-
+      The gateway's outbound OPC-UA connection config is file-seedable, but is
+      left to post-setup here so the endpoint URL and security mode can be
+      confirmed against the running simulator.

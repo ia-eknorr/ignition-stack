@@ -1,0 +1,15 @@
+# MySQL - SQL database. Selecting MySQL makes the resolver attach the
+# mysql-jdbc driver to every gateway (Ignition ships no MySQL driver built-in).
+name: mysql
+kind: database
+summary: MySQL database; pulls in the MySQL JDBC driver for the gateway.
+image: mysql:9
+image_env: MYSQL_IMAGE
+network: backend
+provides:
+  - sql-database
+  - mysql-compatible
+requires: []
+env: {}
+seeds_gateway_resources: false
+post_setup: []

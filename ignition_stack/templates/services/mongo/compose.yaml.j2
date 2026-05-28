@@ -1,0 +1,21 @@
+{{ name }}:
+  image: ${MONGO_IMAGE}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    MONGO_INITDB_ROOT_USERNAME: ${DB_USER}
+    MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+  volumes:
+    - ./services/{{ name }}/initdb:/docker-entrypoint-initdb.d:ro
+  healthcheck:
+    test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+    interval: 5s
+    timeout: 10s
+    retries: 10
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

@@ -1,0 +1,13 @@
+{{ name }}:
+  image: {{ image_ref }}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  command: ["--pn=50000", "--autoaccept", "--unsecuretransport"]
+  ports:
+    - "${OPCUA_SIM_PORT}:50000"
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

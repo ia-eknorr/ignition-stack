@@ -1,0 +1,16 @@
+{{ name }}:
+  image: {{ image_ref }}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD}
+  ports:
+    - "${EMQX_MQTT_PORT}:1883"
+    - "${EMQX_DASHBOARD_PORT}:18083"
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

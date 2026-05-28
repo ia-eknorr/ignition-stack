@@ -1,0 +1,16 @@
+{{ name }}:
+  image: {{ image_ref }}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    N8N_SECURE_COOKIE: "false"
+    N8N_RUNNERS_ENABLED: "true"
+  ports:
+    - "${N8N_PORT}:5678"
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

@@ -1,0 +1,19 @@
+# Modbus TCP simulation server (oitc/modbus-server). Serves simulated
+# holding/input registers over Modbus TCP for driver demos.
+name: modbus-sim
+kind: simulator
+summary: Modbus TCP simulation server for the gateway Modbus driver.
+image: oitc/modbus-server:2.2.0
+image_env: MODBUS_SIM_IMAGE
+network: backend
+provides:
+  - modbus-server
+requires: []
+env:
+  MODBUS_SIM_PORT: "5020"
+seeds_gateway_resources: false
+post_setup:
+  - connection: device-connection
+    reason: >-
+      The gateway Modbus device connection (unit ID, register mappings) is set
+      up in the gateway UI once the simulator is reachable.

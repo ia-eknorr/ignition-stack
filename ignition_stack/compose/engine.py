@@ -22,10 +22,12 @@ The two design constraints that drive the implementation:
    golden to need a regeneration.
 
 The render pipeline is intentionally small so per-service templates carry
-all the parametric complexity. Phase 5 will add a service catalog with
-manifest files that the engine reads to know which fragment to render
-for each service; for Phase 4 the engine knows about ``bootstrap``,
-``ignition``, and ``postgres`` directly.
+all the parametric complexity. The engine renders the gateway plumbing
+(``bootstrap`` + ``ignition``) from its own ``compose/templates``, then
+renders the database and every selected service from the Phase-5 service
+catalog at ``templates/services/<name>/compose.yaml.j2``. The config is
+expected to be already resolved (see ``services.resolver``); the engine
+never adds or re-resolves services at render time.
 """
 
 from __future__ import annotations
@@ -36,6 +38,8 @@ from typing import TYPE_CHECKING
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from ruamel.yaml import YAML
+
+from ignition_stack.services.loader import load_all_services, load_service
 
 if TYPE_CHECKING:
     from ignition_stack.catalog.schema import Catalog, ModuleEntry
@@ -48,6 +52,12 @@ if TYPE_CHECKING:
 NETWORK_FRONTEND = "frontend"
 NETWORK_BACKEND = "backend"
 
+# Canonical render order for catalog services so goldens are deterministic.
+# Databases render in their historical position (right after the gateways),
+# handled separately; the rest follow this kind ordering, alphabetical within
+# a kind.
+_SERVICE_KIND_ORDER = ["mqtt-broker", "idp", "simulator", "streaming", "automation"]
+
 
 def render_compose(
     config: ProjectConfig,
@@ -57,9 +67,11 @@ def render_compose(
 
     ``catalog`` is required when any gateway lists modules; the engine
     looks up each module's fully-qualified identifier and emits the
-    ``GATEWAY_MODULES_ENABLED`` / ``ACCEPT_MODULE_LICENSES`` /
-    ``ACCEPT_MODULE_CERTS`` env vars per the resolved q-module-install
-    finding. Pass ``None`` for module-free stacks.
+    ``ACCEPT_MODULE_LICENSES`` / ``ACCEPT_MODULE_CERTS`` env vars per the
+    resolved q-module-install finding. ``GATEWAY_MODULES_ENABLED`` is
+    deliberately omitted: the Phase-1 matrix found it acts as a strict
+    whitelist that quarantines the built-in IA modules (OPC-UA, SQL
+    Historian, ...). Pass ``None`` for module-free stacks.
 
     Returns LF-terminated text suitable for writing to disk.
     """
@@ -95,7 +107,6 @@ def _render_services(
 
     bootstrap_tpl = env.get_template("services/bootstrap.yaml.j2")
     ignition_tpl = env.get_template("services/ignition.yaml.j2")
-    postgres_tpl = env.get_template("services/postgres.yaml.j2")
 
     for gw in config.gateways:
         ctx = _gateway_context(gw, config, catalog)
@@ -103,23 +114,76 @@ def _render_services(
         blocks.append(ignition_tpl.render(**_ignition_context(ctx, config, multi)))
 
     if config.database is not None:
-        # Phase 2 single-gateway keeps `db-${GATEWAY_NAME}` (GATEWAY_NAME
-        # equals the project name there). Multi-gateway uses
-        # `db-${COMPOSE_PROJECT_NAME}` since GATEWAY_NAME is per-gateway
-        # and inlined elsewhere.
-        if multi:
-            container_name_ref = f"{config.database.name}-${{COMPOSE_PROJECT_NAME}}"
-        else:
-            container_name_ref = f"{config.database.name}-${{GATEWAY_NAME}}"
-        blocks.append(
-            postgres_tpl.render(
-                name=config.database.name,
-                container_name_ref=container_name_ref,
-                networks=[NETWORK_BACKEND] if config.network_split else [],
-            )
-        )
+        blocks.append(_render_database(config))
+
+    for svc_name in _ordered_services(config):
+        blocks.append(_render_catalog_service(svc_name, config))
 
     return blocks
+
+
+def _render_database(config: ProjectConfig) -> str:
+    """Render the database fragment from the service catalog (keyed by kind).
+
+    The container name keeps the Phase-2 conventions for byte-stability:
+    single-gateway uses ``db-${GATEWAY_NAME}`` (GATEWAY_NAME equals the project
+    name there); multi-gateway uses ``db-${COMPOSE_PROJECT_NAME}``.
+    """
+    db = config.database
+    assert db is not None
+    if config.is_multi_gateway:
+        container_name_ref = f"{db.name}-${{COMPOSE_PROJECT_NAME}}"
+    else:
+        container_name_ref = f"{db.name}-${{GATEWAY_NAME}}"
+    tpl = _service_jinja_env().get_template(f"{db.kind}/compose.yaml.j2")
+    return tpl.render(
+        name=db.name,
+        container_name_ref=container_name_ref,
+        networks=[NETWORK_BACKEND] if config.network_split else [],
+        extra_databases=db.extra_databases,
+    )
+
+
+def _render_catalog_service(svc_name: str, config: ProjectConfig) -> str:
+    """Render one non-database catalog service from its compose fragment."""
+    manifest = load_service(svc_name)
+    tpl = _service_jinja_env().get_template(f"{svc_name}/compose.yaml.j2")
+    networks = [manifest.network] if config.network_split else []
+    return tpl.render(
+        name=svc_name,
+        image_ref=f"${{{manifest.image_env}}}",
+        container_name_ref=f"{svc_name}-${{COMPOSE_PROJECT_NAME}}",
+        networks=networks,
+        depends_on=_service_dependencies(manifest, config),
+        db_host=config.database.name if config.database else None,
+        db_kind=config.database.kind if config.database else None,
+    )
+
+
+def _ordered_services(config: ProjectConfig) -> list[str]:
+    """Selected non-database services in canonical (kind, name) order."""
+    catalog = load_all_services()
+    order = {kind: i for i, kind in enumerate(_SERVICE_KIND_ORDER)}
+
+    def sort_key(name: str) -> tuple[int, str]:
+        return (order.get(catalog[name].kind, len(order)), name)
+
+    return sorted(config.services, key=sort_key)
+
+
+def _service_dependencies(manifest: object, config: ProjectConfig) -> list[str]:
+    """Compose service names this service depends on (each rendered healthy).
+
+    A service's ``requires:`` capabilities map to the provider already present
+    in the resolved config. Today the only requirable capability is a SQL
+    database, so the dependency is the database service name when present.
+    """
+    requires = getattr(manifest, "requires", [])
+    deps: list[str] = []
+    db_caps = {"sql-database", "postgres-compatible", "mysql-compatible", "document-store"}
+    if config.database is not None and any(cap in db_caps for cap in requires):
+        deps.append(config.database.name)
+    return deps
 
 
 def _gateway_context(
@@ -268,7 +332,12 @@ def _wrap_description(description: str) -> list[str]:
 def _describe(config: ProjectConfig) -> str:
     """Human-readable header comment summarizing the stack."""
     n = len(config.gateways)
-    if n == 1 and config.database and config.database.kind == "postgres":
+    if (
+        n == 1
+        and config.database
+        and config.database.kind == "postgres"
+        and not config.services
+    ):
         return (
             "Walking skeleton: one Ignition 8.3 gateway, one Postgres, "
             "env-driven commissioning so first boot needs no UI."
@@ -276,6 +345,7 @@ def _describe(config: ProjectConfig) -> str:
     parts = [f"{n} Ignition 8.3 gateway{'s' if n != 1 else ''}"]
     if config.database:
         parts.append(f"one {config.database.kind}")
+    parts.extend(config.services)
     if config.network_split:
         parts.append("frontend/backend network split")
     return ", ".join(parts) + "."
@@ -290,6 +360,20 @@ def _jinja_env() -> Environment:
         # those are literal ${...} expressions - Jinja2's default
         # delimiters don't collide. We still set autoescape off because
         # this is YAML, not HTML.
+        autoescape=False,
+    )
+
+
+def _service_jinja_env() -> Environment:
+    """Jinja env rooted at the service catalog (``templates/services/``).
+
+    Template names are ``<service>/compose.yaml.j2``; the service catalog dir
+    is named by slug for non-databases and by database kind for databases.
+    """
+    return Environment(
+        loader=PackageLoader("ignition_stack.templates", "services"),
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
         autoescape=False,
     )
 

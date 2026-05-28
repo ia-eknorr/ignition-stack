@@ -1,0 +1,20 @@
+# Kafka - single-node KRaft broker. Ignition talks to it via the built-in
+# Kafka connector / Event Streams modules (no third-party .modl needed).
+name: kafka
+kind: streaming
+summary: Single-node Kafka broker (KRaft mode) for Event Streams demos.
+image: confluentinc/cp-kafka:8.2.1
+image_env: KAFKA_IMAGE
+network: backend
+provides:
+  - kafka-broker
+requires: []
+env:
+  KAFKA_PORT: "9094"
+  KAFKA_CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+seeds_gateway_resources: false
+post_setup:
+  - connection: kafka-connector
+    reason: >-
+      Configure Ignition's built-in Kafka connector to point at
+      kafka:9092 in the gateway once the broker is up.

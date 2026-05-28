@@ -1,0 +1,21 @@
+# EMQX - MQTT broker with a web dashboard.
+name: emqx
+kind: mqtt-broker
+summary: EMQX MQTT broker with management dashboard.
+image: emqx/emqx:6.2.0
+image_env: EMQX_IMAGE
+network: backend
+provides:
+  - mqtt-broker
+requires: []
+env:
+  EMQX_MQTT_PORT: "1884"
+  EMQX_DASHBOARD_PORT: "18083"
+  EMQX_DASHBOARD_PASSWORD: public
+seeds_gateway_resources: false
+post_setup:
+  - connection: mqtt-engine-connection
+    reason: >-
+      Linking an Ignition gateway to the broker needs the Cirrus Link MQTT
+      Engine/Transmission module plus an MQTT server endpoint in the gateway,
+      configured once the stack is up.

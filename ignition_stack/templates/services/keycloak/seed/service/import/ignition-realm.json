@@ -1,0 +1,31 @@
+{
+  "realm": "ignition",
+  "enabled": true,
+  "displayName": "Ignition",
+  "clients": [
+    {
+      "clientId": "ignition-gateway",
+      "name": "Ignition Gateway",
+      "description": "OIDC client for Ignition gateway single sign-on. Copy this client's secret into the gateway IdP config (see POST-SETUP.md).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "ignition-admin",
+        "description": "Maps to the Administrator role in the Ignition gateway."
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{{ name }}:
+  image: {{ image_ref }}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+  ports:
+    - "${RABBITMQ_MQTT_PORT}:1883"
+    - "${RABBITMQ_MGMT_PORT}:15672"
+  volumes:
+    - ./services/{{ name }}/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

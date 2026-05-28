@@ -1,0 +1,14 @@
+# MongoDB - document store. Used by automation/streaming demos that want a
+# NoSQL backend. Not a SQL database, so it does not satisfy Keycloak.
+name: mongo
+kind: database
+summary: MongoDB document store for NoSQL demos.
+image: mongo:7
+image_env: MONGO_IMAGE
+network: backend
+provides:
+  - document-store
+requires: []
+env: {}
+seeds_gateway_resources: false
+post_setup: []

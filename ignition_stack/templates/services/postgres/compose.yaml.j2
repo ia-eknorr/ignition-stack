@@ -6,6 +6,13 @@
     TZ: ${TZ}
     POSTGRES_USER: ${DB_USER}
     POSTGRES_PASSWORD: ${DB_PASSWORD}
+{%- if extra_databases %}
+    EXTRA_DATABASES: ${EXTRA_DATABASES}
+{%- endif %}
+{%- if extra_databases %}
+  volumes:
+    - ./services/{{ name }}/initdb:/docker-entrypoint-initdb.d:ro
+{%- endif %}
   healthcheck:
     test: ["CMD", "pg_isready", "-h", "localhost", "-U", "${DB_USER}"]
     interval: 5s

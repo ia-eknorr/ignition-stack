@@ -1,0 +1,16 @@
+# n8n - workflow automation. The user-facing service in the catalog, so it
+# lands on the frontend network when the network split is on. Pairs with the
+# Ignition MCP module in the mcp-n8n profile (Phase 6).
+name: n8n
+kind: automation
+summary: n8n workflow automation engine.
+image: n8nio/n8n:2.23.0
+image_env: N8N_IMAGE
+network: frontend
+provides:
+  - automation
+requires: []
+env:
+  N8N_PORT: "5678"
+seeds_gateway_resources: false
+post_setup: []

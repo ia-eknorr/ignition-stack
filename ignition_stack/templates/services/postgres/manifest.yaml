@@ -1,0 +1,21 @@
+# PostgreSQL - the default Ignition SQL store / historian backend.
+# Provides the sql-database capability Keycloak depends on.
+name: postgres
+kind: database
+summary: PostgreSQL database, the default Ignition historian and SQL store.
+image: postgres:18.1
+image_env: POSTGRES_IMAGE
+network: backend
+provides:
+  - sql-database
+  - postgres-compatible
+requires: []
+# DB credentials (DB_USER / DB_PASSWORD / DB_HOST) are emitted by the writer's
+# shared database .env section, not here, so every database kind shares one
+# credential vocabulary.
+env: {}
+# Ships a pre-seeded gateway database-connection (config.json + resource.json)
+# plus the internal-secret-provider that holds its password, per the Phase-1
+# matrix db-connection row (file-seedable-config: yes, file-seedable-secret: yes).
+seeds_gateway_resources: true
+post_setup: []

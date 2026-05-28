@@ -1,0 +1,25 @@
+# Keycloak - OIDC/SAML identity provider for gateway single sign-on.
+# Requires a SQL database; the resolver auto-adds Postgres (and a dedicated
+# "keycloak" logical database) when none is selected.
+name: keycloak
+kind: idp
+summary: Keycloak identity provider for gateway OIDC/SAML single sign-on.
+image: quay.io/keycloak/keycloak:26.6.2
+image_env: KEYCLOAK_IMAGE
+network: backend
+provides:
+  - oidc-idp
+requires:
+  - sql-database
+env:
+  KEYCLOAK_ADMIN_USER: admin
+  KEYCLOAK_ADMIN_PASSWORD: admin
+  KEYCLOAK_HTTP_PORT: "8081"
+seeds_gateway_resources: false
+post_setup:
+  - connection: identity-provider
+    reason: >-
+      Keycloak generates the OIDC client secret at runtime, so it cannot be
+      file-seeded into the gateway's identity-provider config. Create (or open)
+      the ignition-gateway client in Keycloak, copy its secret, and paste it
+      into the gateway's IdP configuration.

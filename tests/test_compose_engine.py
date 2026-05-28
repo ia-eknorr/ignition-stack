@@ -187,11 +187,14 @@ def test_frontend_gets_edition_override_backend_does_not() -> None:
 
 
 def test_module_env_vars_only_emitted_on_gateways_with_modules() -> None:
-    """Modules attached to a gateway add GATEWAY_MODULES_ENABLED + accept-* vars.
+    """Modules attached to a gateway add the two ACCEPT_MODULE_* vars.
 
-    Resolved q-module-install: a placed .modl that is not named in
-    GATEWAY_MODULES_ENABLED does not auto-load, so the engine must emit
-    these env vars on every gateway that has cached modules.
+    Resolved q-module-install (Phase-1 matrix): place the .modl and set
+    ACCEPT_MODULE_LICENSES + ACCEPT_MODULE_CERTS to its identifier. We do
+    NOT emit GATEWAY_MODULES_ENABLED - the matrix found it is a strict
+    whitelist that quarantines the built-in IA modules (OPC-UA, SQL
+    Historian) and breaks any stack that pairs a third-party module with a
+    built-in subsystem (e.g. an MQTT broker module + OPC-UA).
     """
     rendered = render_compose(_scaleout_config(), catalog=load_catalog())
     parsed = _parse_yaml(rendered)
@@ -200,9 +203,10 @@ def test_module_env_vars_only_emitted_on_gateways_with_modules() -> None:
     back_env = parsed["services"]["backend"]["environment"]
 
     expected_id = "com.cirruslink.mqtt.engine.gateway"
-    assert front_env["GATEWAY_MODULES_ENABLED"] == expected_id
     assert front_env["ACCEPT_MODULE_LICENSES"] == expected_id
     assert front_env["ACCEPT_MODULE_CERTS"] == expected_id
+    # The whitelist var must never be emitted - it quarantines built-ins.
+    assert "GATEWAY_MODULES_ENABLED" not in front_env
 
     # Backend has no modules attached -> none of the module env vars
     # should land on its environment.
@@ -316,7 +320,9 @@ def test_bootstrap_script_drops_cached_modules_into_user_lib() -> None:
     assert "user-lib/modules" in script, "bootstrap must drop modules into user-lib/modules"
 
 
-def test_database_kind_other_than_postgres_rejected() -> None:
-    """Phase 4 ships postgres only; mysql/mongo arrive with the Phase 5 service catalog."""
-    with pytest.raises(ValueError, match="postgres only"):
-        DatabaseConfig(kind="mysql")
+def test_unsupported_database_kind_rejected() -> None:
+    """The four catalog databases are valid; anything else is a config error."""
+    for kind in ("postgres", "mysql", "mariadb", "mongo"):
+        assert DatabaseConfig(kind=kind).kind == kind
+    with pytest.raises(ValueError, match="unsupported database kind"):
+        DatabaseConfig(kind="oracle")

@@ -1,0 +1,17 @@
+{{ name }}:
+  image: {{ image_ref }}
+  hostname: {{ name }}
+  container_name: {{ container_name_ref }}
+  environment:
+    TZ: ${TZ}
+    ACCEPT_EULA: "true"
+    ADMIN_PASSWORD: ${CHARIOT_ADMIN_PASSWORD}
+  ports:
+    - "${CHARIOT_HTTP_PORT}:8080"
+    - "${CHARIOT_MQTT_PORT}:1883"
+{%- if networks %}
+  networks:
+{%- for net in networks %}
+    - {{ net }}
+{%- endfor %}
+{%- endif %}

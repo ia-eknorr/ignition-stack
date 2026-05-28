@@ -20,6 +20,24 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # database names follow the same shape.
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
+# Supported database kinds and their default images + .env image keys. The
+# default image is filled in when DatabaseConfig.image is left blank so a bare
+# DatabaseConfig(kind="mysql") resolves to a runnable image. Postgres stays
+# pinned to 18.1 to match the Phase-2 walking-skeleton golden; the others track
+# the current major tag (a demo tool, not a production pin).
+_DB_DEFAULT_IMAGE = {
+    "postgres": "postgres:18.1",
+    "mysql": "mysql:9",
+    "mariadb": "mariadb:11",
+    "mongo": "mongo:7",
+}
+_DB_IMAGE_ENV = {
+    "postgres": "POSTGRES_IMAGE",
+    "mysql": "MYSQL_IMAGE",
+    "mariadb": "MARIADB_IMAGE",
+    "mongo": "MONGO_IMAGE",
+}
+
 
 class GatewayConfig(BaseModel):
     """A single Ignition gateway in the stack.
@@ -54,9 +72,9 @@ class GatewayConfig(BaseModel):
         description=(
             "Module catalog entry names (slugs) to attach to this gateway. "
             "The compose engine wires each cached .modl into the gateway "
-            "volume AND enumerates it in GATEWAY_MODULES_ENABLED + "
-            "ACCEPT_MODULE_LICENSES + ACCEPT_MODULE_CERTS per the resolved "
-            "q-module-install finding."
+            "volume AND enumerates it in ACCEPT_MODULE_LICENSES + "
+            "ACCEPT_MODULE_CERTS per the resolved q-module-install finding "
+            "(GATEWAY_MODULES_ENABLED is omitted - it quarantines built-ins)."
         ),
     )
 
@@ -98,24 +116,45 @@ class GatewayConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     """A single database service.
 
-    Phase 4 only ships the Postgres variant; the ``kind`` discriminator is
-    a forward-looking marker for Phase 5's MySQL/MariaDB/Mongo branches.
+    Phase 5 widens ``kind`` to the four catalog databases. ``image`` is filled
+    from the kind's default when left blank so the resolver can auto-add a
+    database (DatabaseConfig(kind="postgres")) without knowing the tag.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(default="db")
     kind: str = Field(default="postgres")
-    image: str = Field(default="postgres:18.1")
+    image: str = Field(default="", description="image:tag; filled from the kind default if blank.")
     user: str = Field(default="ignition")
     password: str = Field(default="ignition")
+    extra_databases: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional logical databases to create on first init beyond the "
+            "default one named after the user. The resolver appends 'keycloak' "
+            "here when Keycloak is selected against this database."
+        ),
+    )
 
     @field_validator("kind")
     @classmethod
     def _validate_kind(cls, v: str) -> str:
-        if v not in {"postgres"}:
-            raise ValueError(f"unsupported database kind '{v}'; Phase 4 ships postgres only")
+        if v not in _DB_DEFAULT_IMAGE:
+            supported = ", ".join(sorted(_DB_DEFAULT_IMAGE))
+            raise ValueError(f"unsupported database kind '{v}'; supported: {supported}")
         return v
+
+    @model_validator(mode="after")
+    def _fill_default_image(self) -> DatabaseConfig:
+        if not self.image:
+            self.image = _DB_DEFAULT_IMAGE[self.kind]
+        return self
+
+    @property
+    def image_env(self) -> str:
+        """The ``.env`` key the database fragment reads for its image."""
+        return _DB_IMAGE_ENV[self.kind]
 
 
 class ProjectConfig(BaseModel):
@@ -137,6 +176,15 @@ class ProjectConfig(BaseModel):
     database: DatabaseConfig | None = Field(
         default_factory=DatabaseConfig,
         description="Database service. Set to None for a gateway-only stack.",
+    )
+    services: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Non-database catalog services to include (e.g. 'keycloak', "
+            "'hivemq', 'opcua-sim'). Slugs are validated against the service "
+            "catalog by the resolver, which also auto-adds implicit "
+            "dependencies (Keycloak -> a SQL database)."
+        ),
     )
     network_split: bool = Field(
         default=False,
@@ -186,4 +234,11 @@ class ProjectConfig(BaseModel):
         if len(set(names)) != len(names):
             dupes = sorted({n for n in names if names.count(n) > 1})
             raise ValueError(f"gateway names must be unique; duplicates: {dupes}")
+        return self
+
+    @model_validator(mode="after")
+    def _unique_services(self) -> ProjectConfig:
+        if len(set(self.services)) != len(self.services):
+            dupes = sorted({s for s in self.services if self.services.count(s) > 1})
+            raise ValueError(f"services must be unique; duplicates: {dupes}")
         return self

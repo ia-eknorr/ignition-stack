@@ -1,0 +1,22 @@
+# Chariot - the Cirrus Link MQTT broker, the primary pick for Sparkplug SCADA
+# demos. Web UI + MQTT, commissioned from env on first boot.
+name: chariot
+kind: mqtt-broker
+summary: Cirrus Link Chariot MQTT broker (Sparkplug-aware, web UI).
+image: cirruslink/chariot:3.0.0
+image_env: CHARIOT_IMAGE
+network: backend
+provides:
+  - mqtt-broker
+requires: []
+env:
+  CHARIOT_ADMIN_PASSWORD: password
+  CHARIOT_HTTP_PORT: "8090"
+  CHARIOT_MQTT_PORT: "1886"
+seeds_gateway_resources: false
+post_setup:
+  - connection: mqtt-engine-connection
+    reason: >-
+      Linking an Ignition gateway to the broker needs the Cirrus Link MQTT
+      Engine/Transmission module plus an MQTT server endpoint in the gateway,
+      configured once the stack is up.

@@ -1,0 +1,19 @@
+# HiveMQ CE - lightweight MQTT broker, anonymous access by default.
+name: hivemq
+kind: mqtt-broker
+summary: HiveMQ Community Edition MQTT broker.
+image: hivemq/hivemq-ce:2025.5
+image_env: HIVEMQ_IMAGE
+network: backend
+provides:
+  - mqtt-broker
+requires: []
+env:
+  HIVEMQ_MQTT_PORT: "1883"
+seeds_gateway_resources: false
+post_setup:
+  - connection: mqtt-engine-connection
+    reason: >-
+      Linking an Ignition gateway to the broker needs the Cirrus Link MQTT
+      Engine/Transmission module plus an MQTT server endpoint in the gateway,
+      configured once the stack is up.

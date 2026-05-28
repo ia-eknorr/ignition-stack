@@ -1,0 +1,23 @@
+# RabbitMQ - message broker; the bundled enabled_plugins turns on the MQTT
+# plugin so it can act as an MQTT broker alongside AMQP.
+name: rabbitmq
+kind: mqtt-broker
+summary: RabbitMQ broker with the MQTT plugin and management UI enabled.
+image: rabbitmq:4.3.1-management
+image_env: RABBITMQ_IMAGE
+network: backend
+provides:
+  - mqtt-broker
+requires: []
+env:
+  RABBITMQ_USER: ignition
+  RABBITMQ_PASSWORD: ignition
+  RABBITMQ_MQTT_PORT: "1885"
+  RABBITMQ_MGMT_PORT: "15672"
+seeds_gateway_resources: false
+post_setup:
+  - connection: mqtt-engine-connection
+    reason: >-
+      Linking an Ignition gateway to the broker needs the Cirrus Link MQTT
+      Engine/Transmission module plus an MQTT server endpoint in the gateway,
+      configured once the stack is up.
