@@ -141,7 +141,7 @@ def _render_arguments(command: object) -> list[str]:
         metavar = _argument_metavar(arg)
         kind = "required" if arg.required else "optional"  # type: ignore[attr-defined]
         help_text = _squeeze(getattr(arg, "help", "") or "")
-        suffix = f" — {help_text}" if help_text else ""
+        suffix = f": {help_text}" if help_text else ""
         lines.append(f"- `{metavar}` ({kind}){suffix}")
     lines.append("")
     return lines
@@ -167,7 +167,7 @@ def _render_options(command: object) -> list[str]:
         note = f" ({'; '.join(notes)})" if notes else ""
 
         help_text = _squeeze(opt.help or "")  # type: ignore[attr-defined]
-        suffix = f" — {help_text}" if help_text else ""
+        suffix = f": {help_text}" if help_text else ""
         lines.append(f"- {head}{note}{suffix}")
     lines.append("")
     return lines

@@ -43,8 +43,7 @@ Each `kind: module` entry carries two distinct strings:
   `/usr/local/bin/ignition/user-lib/jdbc/`.
 
 Confusing the two means the gateway places the file but refuses to
-auto-load it. See `scripts/seeding-poc/experiments/module-install/` for
-the Phase 1 verification.
+auto-load it.
 
 ## EA-gated modules
 

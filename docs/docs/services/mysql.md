@@ -19,7 +19,7 @@ MySQL is one of the four SQL databases the wizard offers. Ignition ships no MySQ
 
 Choose MySQL at the wizard's database prompt. Credentials come from the shared `.env` database section (`DB_USER`, `DB_PASSWORD`, `DB_HOST`), the same keys every database kind uses, defaulting to `ignition` / `ignition`.
 
-When MySQL is the selected database, the [dependency resolver](../architecture/how-generation-works.md) attaches the `mysql-jdbc` driver to every gateway. The connector `.jar` lands in the gateway's `user-lib/jdbc/`, which is what makes the database reachable from Ignition. This is the one imperative coupling in the resolver; everything else is declarative capability matching.
+When MySQL is the selected database, the [dependency resolver](../concepts/how-generation-works.md) attaches the `mysql-jdbc` driver to every gateway. The connector `.jar` lands in the gateway's `user-lib/jdbc/`, which is what makes the database reachable from Ignition. This is the one imperative coupling in the resolver; everything else is declarative capability matching.
 
 ## Seeding
 

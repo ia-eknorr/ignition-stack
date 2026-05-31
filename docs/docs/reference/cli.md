@@ -18,7 +18,7 @@ Generate ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos.
 
 **Options**
 
-- `--version` (flag) — Show ignition-stack version and exit.
+- `--version` (flag): Show ignition-stack version and exit.
 
 ## `ignition-stack init`
 
@@ -33,16 +33,16 @@ ignition-stack init [OPTIONS] NAME
 
 **Arguments**
 
-- `NAME` (required) — Project name. Becomes the directory, the compose project, and the gateway name.
+- `NAME` (required): Project name. Becomes the directory, the compose project, and the gateway name.
 
 **Options**
 
-- `--profile`, `-p` `TEXT` — Architecture profile to materialize (skips the wizard): - hub-and-spoke: Central hub gateway + N Edge spoke gateways. Spoke count > 8 needs --force. - mcp-n8n: One Ignition gateway + n8n + manual MCP (EA) module drop-in. - scaleout: Frontend + backend Ignition gateways via gateway network + Postgres. - standalone: One full Ignition 8.3 gateway + Postgres. The default starter stack.
-- `--spokes` `INTEGER` (default `3`) — Spoke gateway count for the hub-and-spoke profile (ignored otherwise).
-- `--force` (flag) — Bypass the hub-and-spoke red-tier RAM advisory.
-- `--edge-role` `TEXT` — Gateway role that runs the Ignition Edge edition. Scaleout defaults to 'frontend'; hub-and-spoke defaults its spokes to Edge. Pass 'none' to disable the profile's edge default; pass a role name ('hub', 'gateway', ...) to opt that specific role in.
-- `--keep-cli` (flag) — SE-demo mode: keep the lifecycle primitives in .ignition-stack/ so `ignition-stack reset` / `switch-profile` can regenerate the project. The default (one-shot) leaves a self-contained project with no CLI primitives behind.
-- `--output-dir`, `-o` `PATH` — Parent directory the project is written into. Defaults to the current directory.
+- `--profile`, `-p` `TEXT`: Architecture profile to materialize (skips the wizard): - hub-and-spoke: Central hub gateway + N Edge spoke gateways. Spoke count > 8 needs --force. - mcp-n8n: One Ignition gateway + n8n + manual MCP (EA) module drop-in. - scaleout: Frontend + backend Ignition gateways via gateway network + Postgres. - standalone: One full Ignition 8.3 gateway + Postgres. The default starter stack.
+- `--spokes` `INTEGER` (default `3`): Spoke gateway count for the hub-and-spoke profile (ignored otherwise).
+- `--force` (flag): Bypass the hub-and-spoke red-tier RAM advisory.
+- `--edge-role` `TEXT`: Gateway role that runs the Ignition Edge edition. Scaleout defaults to 'frontend'; hub-and-spoke defaults its spokes to Edge. Pass 'none' to disable the profile's edge default; pass a role name ('hub', 'gateway', ...) to opt that specific role in.
+- `--keep-cli` (flag): SE-demo mode: keep the lifecycle primitives in .ignition-stack/ so `ignition-stack reset` / `switch-profile` can regenerate the project. The default (one-shot) leaves a self-contained project with no CLI primitives behind.
+- `--output-dir`, `-o` `PATH`: Parent directory the project is written into. Defaults to the current directory.
 
 ## `ignition-stack modules`
 
@@ -62,14 +62,14 @@ ignition-stack modules download [OPTIONS] [NAMES...]
 
 **Arguments**
 
-- `NAMES...` (optional) — Entries to download. Omit to download every non-manual entry.
+- `NAMES...` (optional): Entries to download. Omit to download every non-manual entry.
 
 **Options**
 
-- `--catalog` `PATH` — Path to a modules.yaml. Defaults to the bundled catalog.
-- `--ignition-version` `TEXT` — Filter to entries verified for this exact version.
-- `--cache-dir` `PATH` (default `modules/cache`) — Destination directory for cached artifacts.
-- `--offline` (flag) — No network calls. Fails if any selected entry is missing from the cache.
+- `--catalog` `PATH`: Path to a modules.yaml. Defaults to the bundled catalog.
+- `--ignition-version` `TEXT`: Filter to entries verified for this exact version.
+- `--cache-dir` `PATH` (default `modules/cache`): Destination directory for cached artifacts.
+- `--offline` (flag): No network calls. Fails if any selected entry is missing from the cache.
 
 ### `ignition-stack modules list`
 
@@ -81,8 +81,8 @@ ignition-stack modules list [OPTIONS]
 
 **Options**
 
-- `--catalog` `PATH` — Path to a modules.yaml. Defaults to the bundled catalog.
-- `--ignition-version` `TEXT` — Filter to entries verified for this exact version.
+- `--catalog` `PATH`: Path to a modules.yaml. Defaults to the bundled catalog.
+- `--ignition-version` `TEXT`: Filter to entries verified for this exact version.
 
 ### `ignition-stack modules validate`
 
@@ -94,8 +94,8 @@ ignition-stack modules validate [OPTIONS]
 
 **Options**
 
-- `--catalog` `PATH` — Path to a modules.yaml. Defaults to the bundled catalog.
-- `--skip-network` (flag) — Only validate the schema; skip URL reachability.
+- `--catalog` `PATH`: Path to a modules.yaml. Defaults to the bundled catalog.
+- `--skip-network` (flag): Only validate the schema; skip URL reachability.
 
 ## `ignition-stack reset`
 
@@ -111,7 +111,7 @@ ignition-stack reset [OPTIONS]
 
 **Options**
 
-- `--project-dir`, `-C` `PATH` (default `.`) — The generated SE-demo project to reset. Defaults to the current directory.
+- `--project-dir`, `-C` `PATH` (default `.`): The generated SE-demo project to reset. Defaults to the current directory.
 
 ## `ignition-stack switch-profile`
 
@@ -126,11 +126,11 @@ ignition-stack switch-profile [OPTIONS] PROFILE
 
 **Arguments**
 
-- `PROFILE` (required) — Architecture profile to switch this stack to.
+- `PROFILE` (required): Architecture profile to switch this stack to.
 
 **Options**
 
-- `--project-dir`, `-C` `PATH` (default `.`) — The generated SE-demo project to reshape. Defaults to the current directory.
+- `--project-dir`, `-C` `PATH` (default `.`): The generated SE-demo project to reshape. Defaults to the current directory.
 
 ## `ignition-stack wipe`
 
@@ -146,5 +146,5 @@ ignition-stack wipe [OPTIONS]
 
 **Options**
 
-- `--project-dir`, `-C` `PATH` (default `.`) — The generated project to wipe. Defaults to the current directory.
-- `--dry-run` (flag) — Print the scoped teardown command without running it.
+- `--project-dir`, `-C` `PATH` (default `.`): The generated project to wipe. Defaults to the current directory.
+- `--dry-run` (flag): Print the scoped teardown command without running it.

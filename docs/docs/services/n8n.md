@@ -21,7 +21,7 @@ n8n is bundled automatically by the [mcp-n8n profile](../profiles/mcp-n8n.md), w
 
 ## Preset ports
 
-- `N8N_PORT=5678` — host port for the n8n editor UI.
+- `N8N_PORT=5678`: host port for the n8n editor UI.
 
 ## Post-setup
 

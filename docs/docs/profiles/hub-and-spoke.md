@@ -29,9 +29,9 @@ Each spoke gets its own host port, stepping up from 9089, so you can open any ga
 
 A gateway costs roughly 1.5 GB of RAM, so spoke count is the knob most likely to overcommit a demo machine. The advisory has three tiers:
 
-- **green** (1-4 spokes) — proceed without prompting.
-- **yellow** (5-8 spokes) — the wizard asks for confirmation; the non-interactive path proceeds.
-- **red** (9 or more spokes) — the wizard asks you to acknowledge the cost; the non-interactive path refuses unless you pass `--force`.
+- **green** (1-4 spokes): proceed without prompting.
+- **yellow** (5-8 spokes): the wizard asks for confirmation; the non-interactive path proceeds.
+- **red** (9 or more spokes): the wizard asks you to acknowledge the cost; the non-interactive path refuses unless you pass `--force`.
 
 The wizard surfaces the estimate against available memory so the cost is visible at decision time. If you decline a yellow or red prompt, the wizard steps the count back down to 4 (the top of green) rather than stranding you.
 

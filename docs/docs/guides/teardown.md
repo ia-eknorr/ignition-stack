@@ -1,4 +1,9 @@
-# Cleanup
+---
+title: Tear down a stack
+description: How make wipe and ignition-stack wipe scope teardown to this project's containers, networks, and volumes and nothing else on the host.
+---
+
+# Tear down a stack
 
 Tearing a stack down should remove exactly what `ignition-stack init` brought up - this project's containers, networks, and volumes - and nothing else on the host. Both teardown paths honour that boundary by pinning the compose project name.
 
@@ -49,4 +54,4 @@ To resolve the project name, `wipe` prefers an SE-demo project's recorded config
 
 ## What survives a wipe
 
-A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. For an SE-demo project the `.ignition-stack/` record survives too; pair `wipe` with [`reset`](./modes.md) to return to a clean baseline between customer sessions without re-walking the wizard.
+A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. For an SE-demo project the `.ignition-stack/` record survives too; pair `wipe` with [`reset`](./reset-and-reshape.md) to return to a clean baseline between customer sessions without re-walking the wizard.

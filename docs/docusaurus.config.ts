@@ -27,10 +27,13 @@ const config: Config = {
     // like `<project>` inside code spans; MDX would try to parse those as JSX
     // and fail, whereas CommonMark leaves them untouched.
     format: "detect",
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: "throw",
     },
   },
+
+  themes: ["@docusaurus/theme-mermaid"],
 
   i18n: {
     defaultLocale: "en",
@@ -74,10 +77,10 @@ const config: Config = {
         {
           title: "Docs",
           items: [
-            { label: "Getting started", to: "/" },
-            { label: "CLI reference", to: "/reference/cli" },
+            { label: "Quickstart", to: "/get-started/quickstart" },
             { label: "Profiles", to: "/profiles/" },
             { label: "Services", to: "/services/" },
+            { label: "CLI reference", to: "/reference/cli" },
           ],
         },
         {

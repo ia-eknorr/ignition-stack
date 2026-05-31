@@ -1,3 +1,8 @@
+---
+title: Lifecycle modes
+description: The difference between a one-shot project and an SE-demo project, and when to keep the CLI primitives for repeated reshaping.
+---
+
 # Lifecycle modes
 
 Every `ignition-stack init` runs the same single generation pass, then chooses what to leave behind. That choice is the lifecycle mode, and there are two.

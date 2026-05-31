@@ -1,3 +1,8 @@
+---
+title: How generation works
+description: The pipeline that turns your answers into a runnable project tree, the service catalog, the dependency resolver, and network topology.
+---
+
 # How generation works
 
 `ignition-stack init` resolves a project configuration into a writable tree on disk. The compose generation engine sits at the heart of that pipeline.
@@ -10,6 +15,17 @@
 4. The compose engine renders `docker-compose.yaml` from a static anchor header, per-service Jinja2 fragments, and a footer that declares volumes (and networks when the split is opted into).
 5. The writer renders `.env` from the resolved config, including per-gateway HTTP-port keys for multi-gateway projects and each service's preset credentials.
 
+```mermaid
+graph TD
+  A["Your answers: profile, database, services, modules"] --> B["Build ProjectConfig"]
+  B --> C["Resolve dependencies"]
+  C --> D["Copy static assets and overlay seeds"]
+  D --> E["Render docker-compose.yaml"]
+  D --> F["Render .env"]
+  E --> G["Project tree on disk"]
+  F --> G
+```
+
 ## The service catalog
 
 Every supported service is a self-contained directory under `templates/services/<name>/`:
@@ -17,7 +33,7 @@ Every supported service is a self-contained directory under `templates/services/
 - `manifest.yaml` declares the image (and the `.env` key that overrides it), the capabilities the service `provides` and `requires`, its preset `.env` credentials, and which connections it cannot file-seed and defers to `POST-SETUP.md`.
 - `compose.yaml.j2` is the service's compose fragment, rendered with a small context (image reference, container name, networks, dependencies).
 - `seed/service/` is copied into `services/<name>/` and mounted into the service's own container (a Postgres initdb script, a Keycloak realm export, a broker config).
-- `seed/gateway-resources/` is overlaid onto every gateway's `config/resources/` tree, so a service can pre-seed a file-seedable gateway connection. Postgres uses this to ship a working `db-connection` plus the `internal-secret-provider` that holds its password, per the Phase-1 seedability matrix.
+- `seed/gateway-resources/` is overlaid onto every gateway's `config/resources/` tree, so a service can pre-seed a file-seedable gateway connection. Postgres uses this to ship a working `db-connection` plus the `internal-secret-provider` that holds its password. What is file-seedable on Ignition 8.3 is recorded in the [seeding matrix](../reference/seeding-matrix.md).
 
 Adding a service is a data change: drop a new directory in, and the engine, the `.env` writer, and the seed copier pick it up with no code change.
 
@@ -44,6 +60,23 @@ By default every service shares the implicit project bridge (no per-service `net
 - Ignition gateways: both networks (they need DB reach AND user-facing UI exposure).
 - `bootstrap-*` init containers: no network membership; they only write into the data volume.
 
+```mermaid
+graph LR
+  gw["Ignition gateways"]
+  fe(["frontend network"])
+  be(["backend network"])
+  db[("database")]
+  brokers["MQTT / Kafka brokers"]
+  boot["bootstrap init containers"]
+  vol[("data volume")]
+
+  gw --- fe
+  gw --- be
+  db --- be
+  brokers --- be
+  boot -. writes .-> vol
+```
+
 ## Per-gateway env overrides
 
 The `x-ignition-environment` anchor carries the project-wide defaults (`ACCEPT_IGNITION_EULA: "Y"`, `IGNITION_EDITION: standard`, admin credentials, TZ). A gateway that needs a different value (e.g. Edge for a frontend role) inserts an override key after the merge-key reference:
@@ -62,7 +95,7 @@ Every supported combination has a golden snapshot under `tests/golden/<profile>/
 
 The goldens cover:
 
-- `standalone-postgres/` - the Phase 2 walking skeleton (regression contract).
+- `standalone-postgres/` - the standalone-plus-Postgres baseline (regression contract).
 - `scaleout-skeleton/` - two gateways (frontend + backend), network split, frontend running Edge with the `mqtt-engine` module attached.
 - `services/<name>/` - one minimal snapshot per catalog service (and per database kind).
 - `combos/` - key combinations: the smoke stack (Postgres + HiveMQ + OPC-UA-sim) and a network-split stack.

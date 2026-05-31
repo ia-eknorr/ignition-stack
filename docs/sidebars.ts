@@ -7,6 +7,21 @@ const sidebars: SidebarsConfig = {
     "intro",
     {
       type: "category",
+      label: "Get started",
+      collapsed: false,
+      items: ["get-started/installation", "get-started/quickstart"],
+    },
+    {
+      type: "category",
+      label: "Concepts",
+      items: [
+        "concepts/how-generation-works",
+        "concepts/seeding",
+        "concepts/lifecycle-modes",
+      ],
+    },
+    {
+      type: "category",
       label: "Architecture profiles",
       link: { type: "doc", id: "profiles/index" },
       items: [
@@ -21,26 +36,52 @@ const sidebars: SidebarsConfig = {
       label: "Services",
       link: { type: "doc", id: "services/index" },
       items: [
-        "services/postgres",
-        "services/mysql",
-        "services/mariadb",
-        "services/mongo",
-        "services/keycloak",
-        "services/chariot",
-        "services/hivemq",
-        "services/emqx",
-        "services/rabbitmq",
-        "services/kafka",
-        "services/opcua-sim",
-        "services/modbus-sim",
-        "services/n8n",
+        {
+          type: "category",
+          label: "Databases",
+          items: [
+            "services/postgres",
+            "services/mysql",
+            "services/mariadb",
+            "services/mongo",
+          ],
+        },
+        {
+          type: "category",
+          label: "MQTT brokers",
+          items: [
+            "services/chariot",
+            "services/hivemq",
+            "services/emqx",
+            "services/rabbitmq",
+          ],
+        },
+        {
+          type: "category",
+          label: "Streaming",
+          items: ["services/kafka"],
+        },
+        {
+          type: "category",
+          label: "Identity",
+          items: ["services/keycloak"],
+        },
+        {
+          type: "category",
+          label: "Simulators",
+          items: ["services/opcua-sim", "services/modbus-sim"],
+        },
+        {
+          type: "category",
+          label: "Automation",
+          items: ["services/n8n"],
+        },
       ],
     },
     {
       type: "category",
-      label: "How it works",
-      collapsed: false,
-      items: ["architecture/how-generation-works", "lifecycle/modes", "lifecycle/cleanup"],
+      label: "Guides",
+      items: ["guides/reset-and-reshape", "guides/teardown"],
     },
     {
       type: "category",
@@ -49,8 +90,8 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Maintainer guides",
-      items: ["maintainers/adding-a-service", "maintainers/updating-modules"],
+      label: "Contribute",
+      items: ["contribute/add-a-service", "contribute/update-module-versions"],
     },
   ],
 };

@@ -19,9 +19,9 @@ Chariot is Cirrus Link's MQTT broker and the primary pick for Sparkplug SCADA de
 
 The generated `.env` ships these defaults; edit them before `docker compose up`:
 
-- `CHARIOT_ADMIN_PASSWORD=password` — broker admin console password.
-- `CHARIOT_HTTP_PORT=8090` — host port for the Chariot web UI.
-- `CHARIOT_MQTT_PORT=1886` — host port for the MQTT listener.
+- `CHARIOT_ADMIN_PASSWORD=password`: broker admin console password.
+- `CHARIOT_HTTP_PORT=8090`: host port for the Chariot web UI.
+- `CHARIOT_MQTT_PORT=1886`: host port for the MQTT listener.
 
 Chariot commissions itself from these environment values on first boot, so the broker is ready without a manual setup pass.
 
@@ -29,4 +29,4 @@ Chariot commissions itself from these environment values on first boot, so the b
 
 The broker runs on its own; linking an Ignition gateway to it is a manual step:
 
-- **`mqtt-engine-connection`** — connecting a gateway needs the Cirrus Link MQTT Engine or Transmission module plus an MQTT server endpoint pointed at the broker, configured once the stack is up.
+- **`mqtt-engine-connection`**: connecting a gateway needs the Cirrus Link MQTT Engine or Transmission module plus an MQTT server endpoint pointed at the broker, configured once the stack is up.

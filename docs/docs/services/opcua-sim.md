@@ -17,8 +17,8 @@ Microsoft's OPC-PLC server, the mainstream containerized OPC-UA test server. It 
 
 ## Preset ports
 
-- `OPCUA_SIM_PORT=50000` — host port for the OPC-UA endpoint.
+- `OPCUA_SIM_PORT=50000`: host port for the OPC-UA endpoint.
 
 ## Post-setup
 
-- **`opc-ua-connection`** — the gateway's outbound OPC-UA connection config is file-seedable in principle (see the [seeding matrix](../reference/seeding-matrix.md)), but it is left to post-setup here so the endpoint URL and security mode can be confirmed against the running simulator. Add the connection in the gateway once the simulator is reachable.
+- **`opc-ua-connection`**: the gateway's outbound OPC-UA connection config is file-seedable in principle (see the [seeding matrix](../reference/seeding-matrix.md)), but it is left to post-setup here so the endpoint URL and security mode can be confirmed against the running simulator. Add the connection in the gateway once the simulator is reachable.

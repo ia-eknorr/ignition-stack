@@ -27,4 +27,4 @@ Every profile defaults its database to [Postgres](../services/postgres.md) and o
 
 ## Lifecycle
 
-The profile you pick is recorded with the stack when you use SE-demo mode (`--keep-cli`). `ignition-stack switch-profile <slug>` then reshapes the same stack under a different profile, carrying your database, services, reverse-proxy, and edge choices across. See [lifecycle modes](../lifecycle/modes.md).
+The profile you pick is recorded with the stack when you use SE-demo mode (`--keep-cli`). `ignition-stack switch-profile <slug>` then reshapes the same stack under a different profile, carrying your database, services, reverse-proxy, and edge choices across. See [lifecycle modes](../concepts/lifecycle-modes.md) and the [reset and reshape guide](../guides/reset-and-reshape.md).

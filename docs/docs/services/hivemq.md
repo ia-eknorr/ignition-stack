@@ -17,10 +17,10 @@ HiveMQ Community Edition is a lightweight MQTT broker that boots with anonymous 
 
 ## Preset ports
 
-- `HIVEMQ_MQTT_PORT=1883` — host port for the MQTT listener (the standard MQTT port).
+- `HIVEMQ_MQTT_PORT=1883`: host port for the MQTT listener (the standard MQTT port).
 
 HiveMQ CE accepts anonymous connections out of the box, so there is no preset password.
 
 ## Post-setup
 
-- **`mqtt-engine-connection`** — connecting a gateway needs the Cirrus Link MQTT Engine or Transmission module plus an MQTT server endpoint pointed at the broker, configured once the stack is up.
+- **`mqtt-engine-connection`**: connecting a gateway needs the Cirrus Link MQTT Engine or Transmission module plus an MQTT server endpoint pointed at the broker, configured once the stack is up.

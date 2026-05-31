@@ -10,9 +10,9 @@ keeps it honest:
 * ``test_cli_reference_covers_*`` independently walk the Typer command tree and
   assert every command path and every option flag actually appears in the
   rendered page, guarding against a generator bug that silently drops surface.
-* ``test_required_docs_pages_exist`` asserts the page set the Phase 8 brief
-  requires (getting-started, every profile, every service, lifecycle, the
-  maintainer guides) is present on disk.
+* ``test_required_docs_pages_exist`` asserts the required page set (get-started,
+  concepts, every profile, every service, guides, reference, contribute) is
+  present on disk.
 
 The generator lives outside any importable package, so it is loaded by path.
 """
@@ -95,6 +95,11 @@ def test_cli_reference_covers_every_option() -> None:
     "relpath",
     [
         "intro.md",
+        "get-started/installation.md",
+        "get-started/quickstart.md",
+        "concepts/how-generation-works.md",
+        "concepts/seeding.md",
+        "concepts/lifecycle-modes.md",
         "profiles/index.md",
         "profiles/standalone.md",
         "profiles/scaleout.md",
@@ -114,13 +119,12 @@ def test_cli_reference_covers_every_option() -> None:
         "services/opcua-sim.md",
         "services/modbus-sim.md",
         "services/n8n.md",
-        "architecture/how-generation-works.md",
-        "lifecycle/modes.md",
-        "lifecycle/cleanup.md",
+        "guides/reset-and-reshape.md",
+        "guides/teardown.md",
         "reference/cli.md",
         "reference/seeding-matrix.md",
-        "maintainers/adding-a-service.md",
-        "maintainers/updating-modules.md",
+        "contribute/add-a-service.md",
+        "contribute/update-module-versions.md",
     ],
 )
 def test_required_docs_pages_exist(relpath: str) -> None:

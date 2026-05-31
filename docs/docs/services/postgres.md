@@ -25,7 +25,7 @@ Credentials live in the shared database section of the generated `.env` (`DB_USE
 
 Postgres is the only catalog database that seeds a working gateway connection. Its `seed/gateway-resources/` overlay ships a `db-connection` (config plus `resource.json`) and the `internal-secret-provider` that holds the connection password as a JWE blob, so the gateway boots with a `VALID` database connection and no manual step. This follows the `db-connection` row of the [seeding matrix](../reference/seeding-matrix.md), where both the config and the secret are file-seedable.
 
-The other databases ship the container but leave the gateway-side connection to you, because their secret handling was not exercised in the Phase 1 investigation.
+The other databases ship the container but leave the gateway-side connection to you to create in the UI once the stack is up.
 
 ## Post-setup
 

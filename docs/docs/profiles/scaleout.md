@@ -40,9 +40,9 @@ docker compose up -d
 
 `--edge-role` controls which role runs Edge:
 
-- `--edge-role frontend` — frontend runs Edge (the default).
-- `--edge-role backend` — backend runs Edge instead.
-- `--edge-role none` — both gateways run the standard edition.
+- `--edge-role frontend`: frontend runs Edge (the default).
+- `--edge-role backend`: backend runs Edge instead.
+- `--edge-role none`: both gateways run the standard edition.
 
 ## When to use it
 

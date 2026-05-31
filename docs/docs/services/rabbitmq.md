@@ -21,11 +21,11 @@ The `-management` image tag is what supplies the web management UI.
 
 The generated `.env` ships these defaults; edit them before `docker compose up`:
 
-- `RABBITMQ_USER=ignition` — broker and management UI user.
-- `RABBITMQ_PASSWORD=ignition` — broker and management UI password.
-- `RABBITMQ_MQTT_PORT=1885` — host port for the MQTT listener.
-- `RABBITMQ_MGMT_PORT=15672` — host port for the management UI.
+- `RABBITMQ_USER=ignition`: broker and management UI user.
+- `RABBITMQ_PASSWORD=ignition`: broker and management UI password.
+- `RABBITMQ_MQTT_PORT=1885`: host port for the MQTT listener.
+- `RABBITMQ_MGMT_PORT=15672`: host port for the management UI.
 
 ## Post-setup
 
-- **`mqtt-engine-connection`** — connecting a gateway needs the Cirrus Link MQTT Engine or Transmission module plus an MQTT server endpoint pointed at the broker, configured once the stack is up.
+- **`mqtt-engine-connection`**: connecting a gateway needs the Cirrus Link MQTT Engine or Transmission module plus an MQTT server endpoint pointed at the broker, configured once the stack is up.

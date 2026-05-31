@@ -17,8 +17,8 @@ A Modbus TCP simulation server (`oitc/modbus-server`) that serves simulated hold
 
 ## Preset ports
 
-- `MODBUS_SIM_PORT=5020` — host port for the Modbus TCP listener.
+- `MODBUS_SIM_PORT=5020`: host port for the Modbus TCP listener.
 
 ## Post-setup
 
-- **`device-connection`** — the gateway Modbus device connection (unit ID, register mappings) is set up in the gateway UI once the simulator is reachable.
+- **`device-connection`**: the gateway Modbus device connection (unit ID, register mappings) is set up in the gateway UI once the simulator is reachable.

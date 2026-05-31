@@ -103,7 +103,7 @@ Two seed directories, each copied only when present:
 
 ## 4. Capabilities and dependencies
 
-The resolver matches `requires` against `provides` across the catalog and auto-adds whatever is missing, so a dependency is never selected by hand. Declaring `requires: [sql-database]` is exactly how Keycloak pulls in a database. See [how generation works](../architecture/how-generation-works.md) for the resolver in full.
+The resolver matches `requires` against `provides` across the catalog and auto-adds whatever is missing, so a dependency is never selected by hand. Declaring `requires: [sql-database]` is exactly how Keycloak pulls in a database. See [how generation works](../concepts/how-generation-works.md) for the resolver in full.
 
 ## 5. Wire it into tests and docs
 

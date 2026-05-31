@@ -5,7 +5,7 @@ description: The ignition-stack service catalog, how services reach a stack, and
 
 # Services
 
-A service is a container the generated stack can run alongside the Ignition gateways: a database, an MQTT broker, an identity provider, a simulator, or an automation engine. Each one is a self-contained entry in the catalog under `templates/services/<name>/`, carrying its own manifest, compose fragment, and seed assets. Adding or changing a service is a data change, not a code change; see [Adding a service](../maintainers/adding-a-service.md).
+A service is a container the generated stack can run alongside the Ignition gateways: a database, an MQTT broker, an identity provider, a simulator, or an automation engine. Each one is a self-contained entry in the catalog under `templates/services/<name>/`, carrying its own manifest, compose fragment, and seed assets. Adding or changing a service is a data change, not a code change; see [Adding a service](../contribute/add-a-service.md).
 
 ## The catalog
 
@@ -33,14 +33,14 @@ Every image is pinned and overridable through an `.env` key (for example `POSTGR
 - **n8n** is bundled automatically by the [mcp-n8n profile](../profiles/mcp-n8n.md).
 - **Dependencies** are pulled in by the resolver. A service that `requires` a capability gets it satisfied automatically: Keycloak requires `sql-database`, so it brings in Postgres (and a dedicated `keycloak` logical database) when none is present.
 
-The brokers, the Kafka broker, the simulators, and Keycloak are full catalog entries: each ships a manifest, a compose fragment, seed assets, and a golden snapshot under `tests/golden/services/`. They are composed into a stack through the project's resolved `services` list, which the [generation engine](../architecture/how-generation-works.md) and resolver act on.
+The brokers, the Kafka broker, the simulators, and Keycloak are full catalog entries: each ships a manifest, a compose fragment, seed assets, and a golden snapshot under `tests/golden/services/`. They are composed into a stack through the project's resolved `services` list, which the [generation engine](../concepts/how-generation-works.md) and resolver act on.
 
 ## Capabilities and dependencies
 
 Services describe themselves with two capability lists in their manifest:
 
-- **`provides`** — the capabilities a service offers (Postgres provides `sql-database`).
-- **`requires`** — the capabilities it needs from the rest of the stack (Keycloak requires `sql-database`).
+- **`provides`**: the capabilities a service offers (Postgres provides `sql-database`).
+- **`requires`**: the capabilities it needs from the rest of the stack (Keycloak requires `sql-database`).
 
 The resolver matches `requires` against `provides` and adds whatever is missing, so a dependency never has to be selected by hand. It also applies one imperative coupling: selecting MySQL attaches the `mysql-jdbc` driver to every gateway, because Ignition ships no MySQL driver built in.
 
