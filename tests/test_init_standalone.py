@@ -14,6 +14,7 @@ and ``init`` with no name exits non-zero.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -125,6 +126,11 @@ def test_init_refuses_to_clobber_existing_project(runner: CliRunner, tmp_path: P
     assert "not empty" in message or "exists" in message
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="NTFS does not track the Unix execute bit; the script is run as `bash script` "
+    "inside a Linux container, so the host-side bit is irrelevant on Windows.",
+)
 def test_bootstrap_script_is_executable(runner: CliRunner, tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", "demo", "--profile", "standalone", "-o", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
