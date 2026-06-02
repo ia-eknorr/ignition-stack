@@ -1,8 +1,8 @@
 name: docs
 
-# Validates the documentation site: the generated CLI reference must match the
-# live Typer command tree, and the site must build with no broken links.
-# Deploying the built site to GitHub Pages is wired up separately.
+# Validates the documentation site (the generated CLI reference must match the
+# live Typer command tree, and the site must build with no broken links) and,
+# on a push to main, deploys the built site to GitHub Pages.
 
 on:
   pull_request:
@@ -18,6 +18,9 @@ on:
       - "ignition_stack/**"
       - "pyproject.toml"
       - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
 
 jobs:
   cli-reference:
@@ -46,3 +49,30 @@ jobs:
           cache-dependency-path: docs/package-lock.json
       - run: npm ci
       - run: npm run build
+      # Package the built site for Pages only when we intend to publish it.
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [cli-reference, build]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One in-flight publish at a time; let a running deploy finish rather than
+    # cancelling it mid-upload.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
