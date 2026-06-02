@@ -41,7 +41,7 @@ from ignition_stack.profiles import (
     spoke_advisory,
 )
 from ignition_stack.services.resolver import resolve
-from ignition_stack.wizard import walk
+from ignition_stack.wizard import QuestionaryPrompter, walk
 
 GOLDEN_DIR = Path(__file__).parent / "golden" / "profiles"
 
@@ -544,3 +544,42 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
     )
     outcome = walk("demo", prompter)
     assert outcome.confirmed is False
+
+
+# --------------------------------------------------------------------------- #
+# Real QuestionaryPrompter adapter
+#
+# Regression: `select()` must hand questionary the choice *value* (the slug)
+# as `default`, not its rendered label. Questionary validates `default`
+# against choice values and raises ValueError otherwise — which crashed
+# `init` at the very first profile prompt. The ScriptedPrompter used above
+# bypasses this adapter, so it needs its own coverage.
+# --------------------------------------------------------------------------- #
+
+
+def test_questionary_select_default_resolves_to_choice_value(monkeypatch) -> None:
+    from questionary.question import Question
+
+    # Same (value, label) shape the wizard builds: a padded label whose text
+    # is *not* a valid questionary default.
+    choices = [(p.slug, f"{p.slug:<14} - {p.summary}") for p in list_profiles()]
+
+    # Stub only the terminal interaction. The real questionary.select() still
+    # runs and validates `default` during InquirerControl construction — the
+    # exact spot the original ValueError fired.
+    monkeypatch.setattr(Question, "unsafe_ask", lambda self: "standalone")
+
+    answer = QuestionaryPrompter().select("Architecture profile?", choices, default="standalone")
+    assert answer == "standalone"
+
+
+def test_questionary_select_drops_unknown_default(monkeypatch) -> None:
+    """A default that isn't among the choices falls back to None rather than
+    raising — questionary accepts None (no pre-selection)."""
+    from questionary.question import Question
+
+    choices = [(p.slug, p.summary) for p in list_profiles()]
+    monkeypatch.setattr(Question, "unsafe_ask", lambda self: "scaleout")
+
+    answer = QuestionaryPrompter().select("Profile?", choices, default="does-not-exist")
+    assert answer == "scaleout"

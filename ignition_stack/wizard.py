@@ -329,11 +329,10 @@ class QuestionaryPrompter:
         # title (what the user sees) and a value (what we receive). Build
         # the map so we can resolve the answer back to its slug.
         q_choices = [questionary.Choice(title=label, value=value) for value, label in choices]
-        default_label = next(
-            (label for value, label in choices if value == default),
-            None,
-        )
-        answer = questionary.select(message, choices=q_choices, default=default_label).unsafe_ask()
+        # Questionary matches `default` against choice values, not titles, so
+        # pass the slug straight through (or None when it isn't a real choice).
+        default_value = default if any(value == default for value, _ in choices) else None
+        answer = questionary.select(message, choices=q_choices, default=default_value).unsafe_ask()
         return str(answer)
 
     def text(self, message: str, default: str = "") -> str:
