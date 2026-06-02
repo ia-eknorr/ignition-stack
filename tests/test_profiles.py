@@ -583,3 +583,31 @@ def test_questionary_select_drops_unknown_default(monkeypatch) -> None:
 
     answer = QuestionaryPrompter().select("Profile?", choices, default="does-not-exist")
     assert answer == "scaleout"
+
+
+def test_questionary_integer_coerces_and_validates(monkeypatch) -> None:
+    """The integer adapter (used by the hub-and-spoke spoke-count prompt)
+    feeds questionary a string default and an inline validator, then coerces
+    the answer back to int. Capture the validator to exercise its branches
+    directly — driving a live select menu blind can't reach this path."""
+    import questionary
+    from questionary.question import Question
+
+    captured: dict = {}
+    real_text = questionary.text
+
+    def spy_text(message, **kwargs):
+        captured.update(kwargs)
+        return real_text(message, **kwargs)
+
+    monkeypatch.setattr(questionary, "text", spy_text)
+    monkeypatch.setattr(Question, "unsafe_ask", lambda self: "5")
+
+    result = QuestionaryPrompter().integer("How many spokes?", default=3, minimum=2)
+    assert result == 5  # answer coerced str -> int
+    assert captured["default"] == "3"  # default coerced int -> str for the text prompt
+
+    validate = captured["validate"]
+    assert validate("abc") == "Enter an integer."
+    assert validate("1") == "Must be >= 2."
+    assert validate("2") is True
