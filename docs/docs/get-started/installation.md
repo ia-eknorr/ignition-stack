@@ -30,6 +30,10 @@ ignition-stack --version
 
 You do not need a local Ignition install. Every gateway runs in a container from the official `inductiveautomation/ignition` image.
 
+## Supported platforms
+
+The CLI runs on macOS, Linux, and Windows. Continuous integration generates a project and runs the full test suite on all three on every change, and confirms that the files it writes use LF line endings everywhere, so a stack generated on Windows behaves the same as one generated on macOS or Linux. See [Continuous integration](../contribute/ci.md) for what each run proves.
+
 ## Next
 
 Generate and run your first stack in the [Quickstart](./quickstart.md).

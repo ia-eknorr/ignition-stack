@@ -1,5 +1,9 @@
 # ignition-stack
 
+[![CI](https://github.com/ia-eknorr/ignition-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/ia-eknorr/ignition-stack/actions/workflows/ci.yml)
+[![Docs](https://github.com/ia-eknorr/ignition-stack/actions/workflows/docs.yml/badge.svg)](https://github.com/ia-eknorr/ignition-stack/actions/workflows/docs.yml)
+[![Documentation](https://img.shields.io/badge/docs-ia--eknorr.github.io-blue)](https://ia-eknorr.github.io/ignition-stack/)
+
 CLI that generates ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos and SE engagements. Picks an architecture profile, asks a few questions, writes a self-contained project with a hand-readable compose file, env, file-config seed resources, and a `POST-SETUP.md` listing only what could not be pre-seeded.
 
 See [`docs/docs/reference/seeding-matrix.md`](docs/docs/reference/seeding-matrix.md) for which Ignition 8.3 connection types can be provisioned from the filesystem and env on a live 8.3.6 gateway. Full documentation lives in the [`docs/`](docs/) Docusaurus site.

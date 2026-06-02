@@ -91,7 +91,11 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Contribute",
-      items: ["contribute/add-a-service", "contribute/update-module-versions"],
+      items: [
+        "contribute/add-a-service",
+        "contribute/update-module-versions",
+        "contribute/ci",
+      ],
     },
   ],
 };
