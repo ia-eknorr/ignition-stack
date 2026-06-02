@@ -163,7 +163,12 @@ def _render_options(command: object) -> list[str]:
         elif getattr(opt, "is_flag", False):
             notes.append("flag")
         elif opt.default is not None:  # type: ignore[attr-defined]
-            notes.append(f"default `{opt.default}`")  # type: ignore[attr-defined]
+            default = opt.default  # type: ignore[attr-defined]
+            # Render Path defaults with forward slashes so the generated page is
+            # identical on every OS; str(Path(...)) would emit backslashes on
+            # Windows and break the drift check.
+            shown = default.as_posix() if isinstance(default, Path) else default
+            notes.append(f"default `{shown}`")
         note = f" ({'; '.join(notes)})" if notes else ""
 
         help_text = _squeeze(opt.help or "")  # type: ignore[attr-defined]
