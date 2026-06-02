@@ -2,7 +2,7 @@
 
 CLI that generates ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos and SE engagements. Picks an architecture profile, asks a few questions, writes a self-contained project with a hand-readable compose file, env, file-config seed resources, and a `POST-SETUP.md` listing only what could not be pre-seeded.
 
-Status: under construction. The seedability matrix and the walking skeleton are in. See [`docs/ignition-seeding-matrix.md`](docs/ignition-seeding-matrix.md) for which Ignition 8.3 connection types can be provisioned from the filesystem and env on a live 8.3.6 gateway.
+See [`docs/docs/reference/seeding-matrix.md`](docs/docs/reference/seeding-matrix.md) for which Ignition 8.3 connection types can be provisioned from the filesystem and env on a live 8.3.6 gateway. Full documentation lives in the [`docs/`](docs/) Docusaurus site.
 
 ## Install
 
@@ -32,14 +32,15 @@ Everything that ships in the generated project is hand-readable: `docker-compose
 
 ## Commands
 
-| Command | What it does | Phase |
-| --- | --- | --- |
-| `init <name>` | Generate a standalone+Postgres project at `./<name>/`. | 2 (this phase) |
-| `modules` | Manage the `.modl` / JDBC catalog. | 3 |
-| `reset` | Re-run generation from the recorded config. | 7 |
-| `wipe` | Remove this project's containers and volumes only. | 7 |
+| Command | What it does |
+| --- | --- |
+| `init <name>` | Generate a project at `./<name>/` from a profile and a few prompts. |
+| `modules` | Download, verify, and manage the `.modl` / JDBC catalog. |
+| `reset` | Re-run generation from an SE-demo project's recorded config. |
+| `switch-profile` | Reshape an SE-demo project under a different profile. |
+| `wipe` | Remove this project's containers and volumes only. |
 
-`modules`, `reset`, and `wipe` are registered now so the command surface stays stable; they print a "not yet implemented" message until the relevant phase lands.
+See the [CLI reference](docs/docs/reference/cli.md) for every command, argument, and option.
 
 ## What gets generated
 

@@ -1,0 +1,23 @@
+/* Infima theme variables. Ignition's brand orange as the primary accent. */
+:root {
+  --ifm-color-primary: #d9531e;
+  --ifm-color-primary-dark: #c34b1b;
+  --ifm-color-primary-darker: #b84719;
+  --ifm-color-primary-darkest: #983b15;
+  --ifm-color-primary-light: #e05e2b;
+  --ifm-color-primary-lighter: #e26635;
+  --ifm-color-primary-lightest: #e88457;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+  --ifm-color-primary: #f07b48;
+  --ifm-color-primary-dark: #ed6530;
+  --ifm-color-primary-darker: #ec5a23;
+  --ifm-color-primary-darkest: #c8470f;
+  --ifm-color-primary-light: #f39160;
+  --ifm-color-primary-lighter: #f49c6e;
+  --ifm-color-primary-lightest: #f7bb98;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
