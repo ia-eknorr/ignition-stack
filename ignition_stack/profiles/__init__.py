@@ -12,6 +12,7 @@ from ignition_stack.profiles.base import (
     build_profile,
     get_profile,
     list_profiles,
+    mark_redundant,
 )
 from ignition_stack.profiles.hub_and_spoke import ProfileError
 
@@ -23,5 +24,6 @@ __all__ = [
     "build_profile",
     "get_profile",
     "list_profiles",
+    "mark_redundant",
     "spoke_advisory",
 ]

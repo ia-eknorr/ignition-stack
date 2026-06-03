@@ -23,7 +23,12 @@ Two kinds of rule run here, per the hybrid-resolution decision in the design:
 
 from __future__ import annotations
 
-from ignition_stack.config.schema import DatabaseConfig, ProjectConfig
+from ignition_stack.config.schema import (
+    DatabaseConfig,
+    GatewayConfig,
+    ProjectConfig,
+    RedundancyConfig,
+)
 from ignition_stack.services.loader import load_all_services
 from ignition_stack.services.manifest import ServiceManifest
 
@@ -62,11 +67,58 @@ def resolve(config: ProjectConfig) -> ProjectConfig:
     resolved = config.model_copy(deep=True)
 
     _validate_services(resolved, catalog)
+    _expand_redundancy(resolved)
     _satisfy_required_capabilities(resolved, catalog)
     _apply_keycloak_database(resolved)
     _apply_jdbc_drivers(resolved)
 
     return resolved
+
+
+def _expand_redundancy(config: ProjectConfig) -> None:
+    """Expand each redundancy master into an explicit master + backup pair.
+
+    A gateway stamped ``redundancy.mode == "master"`` (by ``mark_redundant`` or
+    a hand-authored config) gets a sibling backup node appended - unless one
+    already exists, which keeps re-resolving an already-expanded config
+    idempotent. That idempotency is the Phase-2 dump/rebuild contract: dumping
+    a resolved redundant stack and rebuilding it with ``-f`` must not grow a
+    third gateway.
+
+    The backup is a normal gateway carrying the master's role, edition, memory,
+    and modules, on the next free HTTP port, with a ``backup`` descriptor
+    pointing back at the master. Running it through the rest of the resolver
+    (JDBC drivers, etc.) afterwards treats it like any other gateway. The
+    compose engine wires its Gateway Network link to the master.
+    """
+    paired_masters = {
+        gw.redundancy.peer
+        for gw in config.gateways
+        if gw.redundancy is not None and gw.redundancy.mode == "backup"
+    }
+    masters = [
+        gw for gw in config.gateways if gw.redundancy is not None and gw.redundancy.mode == "master"
+    ]
+    for master in masters:
+        if master.name in paired_masters:
+            continue  # already expanded (e.g. loaded from a dumped config)
+        next_port = max(gw.http_port for gw in config.gateways) + 1
+        config.gateways.append(
+            GatewayConfig(
+                name=f"{master.name}-backup",
+                role=master.role,
+                ignition_edition=master.ignition_edition,
+                memory_mb=master.memory_mb,
+                http_port=next_port,
+                modules=list(master.modules),
+                redundancy=RedundancyConfig(
+                    mode="backup",
+                    peer=master.name,
+                    gan_port=master.redundancy.gan_port,
+                    seed_redundancy_xml=master.redundancy.seed_redundancy_xml,
+                ),
+            )
+        )
 
 
 def _validate_services(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:

@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ignition_stack.config import ProjectConfig, ReverseProxyConfig
+from ignition_stack.config import ProjectConfig, RedundancyConfig, ReverseProxyConfig
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,12 @@ class ProfileOptions:
     services: tuple[str, ...] = ()
     """Additional service catalog slugs the user picked beyond profile defaults."""
 
+    redundant_role: str | None = None
+    """Role (or gateway name) to make redundant, expanding it into a master +
+    backup pair. ``None`` (default) builds no redundancy. Must name a singleton
+    workhorse role (scaleout 'backend', hub-and-spoke 'hub', standalone
+    'gateway'); replicated tiers ('frontend', 'spoke') are rejected."""
+
 
 class Profile(Protocol):
     """A factory that turns ``ProfileOptions`` into a ``ProjectConfig``."""
@@ -119,6 +125,56 @@ def list_profiles() -> list[Profile]:
     return list(_REGISTRY.values())
 
 
+# Roles that are horizontally replicated, not paired. Ignition redundancy is a
+# two-node master/backup arrangement, so a tier that can have many members
+# (frontends, spokes) is never the redundancy target - those scale out, they
+# don't fail over. Marking one redundant is a usage error.
+_NON_REDUNDANT_ROLES = frozenset({"frontend", "spoke"})
+
+
+def mark_redundant(config: ProjectConfig, redundant_role: str | None) -> ProjectConfig:
+    """Stamp the gateway named/roled ``redundant_role`` as a redundancy master.
+
+    Returns ``config`` unchanged when ``redundant_role`` is None. The expansion
+    into a master+backup pair happens later in
+    :func:`ignition_stack.services.resolver.resolve`; this only marks which
+    gateway to pair, so the same logic serves every profile and the wizard.
+
+    Raises ``ValueError`` (surfaced by the CLI as a usage error, exit code 2)
+    when the role is a replicated frontend/spoke tier, unknown, or ambiguous
+    (matches more than one gateway - you can't pair a horizontally-scaled tier).
+    """
+    if redundant_role is None:
+        return config
+    if redundant_role in _NON_REDUNDANT_ROLES:
+        raise ValueError(
+            f"role '{redundant_role}' is horizontally replicated, not paired; "
+            "redundancy applies to a single gateway (e.g. a scaleout 'backend' "
+            "or a hub-and-spoke 'hub'), never to frontends or spokes"
+        )
+    matches = [gw for gw in config.gateways if redundant_role in (gw.role, gw.name)]
+    if not matches:
+        known = ", ".join(sorted({gw.role or gw.name for gw in config.gateways}))
+        raise ValueError(
+            f"no gateway matches redundant role '{redundant_role}'; available roles: {known}"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"redundant role '{redundant_role}' matches {len(matches)} gateways; "
+            "redundancy pairs a single gateway, so name a singleton role"
+        )
+    master = matches[0]
+    master.redundancy = RedundancyConfig(mode="master", peer=f"{master.name}-backup")
+    return config
+
+
 def build_profile(slug: str, name: str, options: ProfileOptions) -> ProjectConfig:
-    """Materialize a ``ProjectConfig`` for the named profile."""
-    return get_profile(slug).build(name, options)
+    """Materialize a ``ProjectConfig`` for the named profile.
+
+    The profile builds the base topology; ``mark_redundant`` then stamps the
+    redundancy master when ``options.redundant_role`` is set, leaving the
+    resolver to expand the pair. Keeping the stamp here (not in each profile)
+    means one eligibility rule serves every profile and the wizard alike.
+    """
+    config = get_profile(slug).build(name, options)
+    return mark_redundant(config, options.redundant_role)

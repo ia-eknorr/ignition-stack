@@ -40,6 +40,56 @@ _DB_IMAGE_ENV = {
 }
 
 
+class RedundancyConfig(BaseModel):
+    """Redundancy descriptor attached to a gateway that is part of a pair.
+
+    Ignition redundancy is strictly two-node master/backup. A role marked
+    redundant resolves into two gateways (see ``services.resolver``): the
+    master keeps the role's name and carries ``mode="master"``; the backup is
+    named ``<master>-backup`` and carries ``mode="backup"`` with ``peer`` set
+    to the master's service name. ``peer`` always names the *other* node.
+
+    The Phase-3 spike (``verification/redundancy-spike/``) verified a fully
+    zero-touch pair on 8.3.6 using a **plain** (non-SSL) Gateway Network link
+    on port 8088 plus a pre-seeded ``data/redundancy.xml`` per node. So
+    ``gan_port`` defaults to 8088 and ``seed_redundancy_xml`` defaults on -
+    the seed is what actually sets the redundancy *role* (no env var does),
+    and plain/8088 sidesteps the GAN certificate-approval handshake that the
+    SSL path (8060) would force into a manual UI step. Plain transport is a
+    demo-only default; cross-host deployments should use SSL + approved certs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["master", "backup"] = Field(
+        description="This node's redundancy role: 'master' or 'backup'."
+    )
+    peer: str = Field(
+        description=(
+            "Service name of the other node in the pair. The backup points at "
+            "the master here (and over the Gateway Network); the master points "
+            "at its backup."
+        ),
+    )
+    gan_port: int = Field(
+        default=8088,
+        ge=1,
+        le=65535,
+        description=(
+            "Gateway Network port the redundancy link rides. 8088 is plain "
+            "(non-SSL) and auto-approves; 8060 is SSL and needs a cert approval."
+        ),
+    )
+    seed_redundancy_xml: bool = Field(
+        default=True,
+        description=(
+            "Pre-seed data/redundancy.xml so the node boots straight into its "
+            "role. On by default per the Phase-3 spike: nothing else sets the "
+            "redundancy mode, so without the seed the pair never forms."
+        ),
+    )
+
+
 class GatewayConfig(BaseModel):
     """A single Ignition gateway in the stack.
 
@@ -76,6 +126,15 @@ class GatewayConfig(BaseModel):
             "volume AND enumerates it in ACCEPT_MODULE_LICENSES + "
             "ACCEPT_MODULE_CERTS per the resolved q-module-install finding "
             "(GATEWAY_MODULES_ENABLED is omitted - it quarantines built-ins)."
+        ),
+    )
+    redundancy: RedundancyConfig | None = Field(
+        default=None,
+        description=(
+            "Redundancy descriptor when this gateway is half of a master/backup "
+            "pair. None (default) is a standalone, non-redundant gateway. The "
+            "resolver expands a single master-marked gateway into the pair; the "
+            "compose engine wires the backup's Gateway Network link to the master."
         ),
     )
 
@@ -308,4 +367,29 @@ class ProjectConfig(BaseModel):
         if len(set(self.services)) != len(self.services):
             dupes = sorted({s for s in self.services if self.services.count(s) > 1})
             raise ValueError(f"services must be unique; duplicates: {dupes}")
+        return self
+
+    @model_validator(mode="after")
+    def _redundant_pair_shares_edition(self) -> ProjectConfig:
+        """Edge redundancy is Edge-to-Edge only; reject a mixed-edition pair.
+
+        Checked from the backup side: a backup names its master via
+        ``redundancy.peer``, and a backup only exists once the pair is fully
+        formed (post-resolve, or in a hand-authored ``-f`` file), so there is
+        no construction-time false positive against a master whose backup the
+        resolver has not appended yet. The master+backup must share an edition
+        because an Edge gateway can only fail over to another Edge gateway.
+        """
+        by_name = {gw.name: gw for gw in self.gateways}
+        for gw in self.gateways:
+            if gw.redundancy is None or gw.redundancy.mode != "backup":
+                continue
+            master = by_name.get(gw.redundancy.peer)
+            if master is None or master.ignition_edition == gw.ignition_edition:
+                continue
+            raise ValueError(
+                f"redundant pair '{master.name}' ({master.ignition_edition}) / "
+                f"'{gw.name}' ({gw.ignition_edition}) mixes editions; Ignition "
+                "redundancy is Edge-to-Edge only, so both nodes must share an edition"
+            )
         return self

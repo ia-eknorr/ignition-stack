@@ -261,6 +261,16 @@ def _ignition_context(
     # override when this gateway differs - keeps Phase 2's environment
     # block as the bare anchor reference.
     edition_override = gw.ignition_edition if gw.ignition_edition != "standard" else None
+
+    # Redundancy wiring (Phase 4, per the verified Phase-3 spike):
+    #  - Any node in a pair opens its incoming Gateway Network policy
+    #    (Unrestricted + no-SSL) so the plain redundancy link auto-approves.
+    #  - The backup additionally points a generic outgoing GAN connection at
+    #    the master (HOST/PORT/ENABLESSL - all three, not just HOST, or it
+    #    defaults to SSL:8060 and faults) and must NOT be renamed via -n: it
+    #    adopts the master's system name on first sync.
+    is_redundant = gw.redundancy is not None
+    is_backup = is_redundant and gw.redundancy.mode == "backup"
     return {
         "service_name": ctx["service_name"],
         "bootstrap_service_name": ctx["bootstrap_service_name"],
@@ -272,6 +282,10 @@ def _ignition_context(
         "module_identifiers": ctx["module_identifiers"],
         "database_service": config.database.name if config.database else None,
         "networks": ctx["networks"],
+        "redundant": is_redundant,
+        "rename": not is_backup,
+        "gan_peer_host": gw.redundancy.peer if is_backup else None,
+        "gan_port": gw.redundancy.gan_port if is_backup else None,
     }
 
 
@@ -332,12 +346,7 @@ def _wrap_description(description: str) -> list[str]:
 def _describe(config: ProjectConfig) -> str:
     """Human-readable header comment summarizing the stack."""
     n = len(config.gateways)
-    if (
-        n == 1
-        and config.database
-        and config.database.kind == "postgres"
-        and not config.services
-    ):
+    if n == 1 and config.database and config.database.kind == "postgres" and not config.services:
         return (
             "Walking skeleton: one Ignition 8.3 gateway, one Postgres, "
             "env-driven commissioning so first boot needs no UI."
@@ -393,5 +402,3 @@ def _round_trip(raw: str) -> str:
     out = io.StringIO()
     yaml.dump(parsed, out)
     return out.getvalue()
-
-

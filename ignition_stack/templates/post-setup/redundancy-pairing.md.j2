@@ -1,0 +1,24 @@
+## Verify redundancy pairing
+
+{{ reason }}
+{% for pair in redundancy_pairs %}
+- **master** (`{{ pair.master }}`): {{ pair.master_url }}
+- **backup** (`{{ pair.backup }}`): {{ pair.backup_url }}
+  pairs with the master over the Gateway Network on **port {{ pair.gan_port }}** (plain, no SSL).
+{%- endfor %}
+
+Within about a minute of both nodes reaching RUNNING, open the **master** above
+and go to Config -> System -> Redundancy. You should see **PEER CONNECTED: Yes**
+and **Sync Status: Good**; the backup pulls a one-time full config sync from the
+master. No mode selection or certificate approval is needed - the seeded
+`redundancy.xml` set the roles and the plain link auto-approves.
+
+If the pair has not formed, confirm both containers are up and re-check after the
+backup finishes its first sync. The full manual pairing runbook (and the SSL
+variant) lives in `docs/docs/guides/redundancy.md`.
+
+> **Security:** this stack uses a **plain, non-SSL** redundancy link with an
+> `Unrestricted` Gateway Network policy. That is safe only on an isolated demo
+> network - redundancy replicates the entire gateway (projects, tags, secrets)
+> over the link. For any cross-host or production deployment, switch to SSL on
+> port 8060 with approved certificates.
