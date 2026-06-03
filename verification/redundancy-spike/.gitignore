@@ -1,0 +1,6 @@
+# Live state captured from running containers during a spike run (the canonical
+# observed redundancy.xml contents are transcribed into the findings doc, so
+# this dir is throwaway). The compose files and the seed/ inputs ARE tracked.
+captured/
+*.log
+.playwright-mcp/
