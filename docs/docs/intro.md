@@ -24,13 +24,13 @@ A generated project is plain Docker Compose with no hidden state. The CLI's job 
 
 - **[Profiles](./profiles/index.md)** decide the shape of the stack: how many gateways, in what roles, on what network layout.
 - **[Services](./services/index.md)** are the containers that run alongside the gateways: databases, MQTT brokers, an identity provider, simulators, and an automation engine.
-- **[Concepts](./concepts/how-generation-works.md)** explain how generation, the capability resolver, lifecycle modes, and seeding work.
+- **[Concepts](./concepts/how-generation-works.md)** explain how generation, the capability resolver, the configuration record, and seeding work.
 - **[Guides](./guides/reset-and-reshape.md)** cover the day-to-day tasks: resetting, reshaping, and tearing a stack down.
 - **[Reference](./reference/cli.md)** is the lookup layer: every CLI command and the Ignition 8.3 seeding matrix.
 
-## Two ways to keep a stack
+## Every stack is reshapeable
 
-By default `init` leaves a **one-shot** project: fully self-contained, no trace of the CLI. Pass `--keep-cli` for an **SE-demo** project that records its configuration so `ignition-stack reset` and `switch-profile` can regenerate or reshape it later. See [lifecycle modes](./concepts/lifecycle-modes.md) for the trade-off.
+Every `init` writes a [configuration record](./concepts/configuration-record.md) alongside the runnable tree, so `ignition-stack reset` and `switch-profile` can regenerate or reshape any project later. The same record is portable: `init --dry-run` dumps it and `init -f` rebuilds from it, for a [fully declarative workflow](./guides/declarative-config.md).
 
 ## New here?
 

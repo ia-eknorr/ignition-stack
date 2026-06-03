@@ -1,13 +1,11 @@
 ---
 title: Reset and reshape a stack
-description: Use ignition-stack reset and switch-profile to return an SE-demo project to a clean baseline or move it to a different architecture profile.
+description: Use ignition-stack reset and switch-profile to return a project to a clean baseline or move it to a different architecture profile.
 ---
 
 # Reset and reshape a stack
 
-An SE-demo project records how it was generated, which lets you regenerate or reshape it without re-walking the wizard. Both commands here need that record, so they only work on a project created with `--keep-cli`. See [lifecycle modes](../concepts/lifecycle-modes.md) for the difference between a one-shot and an SE-demo project.
-
-If you generated a one-shot project, neither command will run against it; re-run `init` with `--keep-cli` to get a reshapeable stack.
+Every generated project records how it was built in its [configuration record](../concepts/configuration-record.md), which lets you regenerate or reshape it without re-walking the wizard. Both commands here read that record, so they work on any project this CLI generated.
 
 ## Reset to a clean baseline
 
@@ -35,7 +33,7 @@ cd demo && docker compose up -d  # bring the clean stack back up
 ignition-stack switch-profile scaleout -C ./demo
 ```
 
-It regenerates in place and re-records the result, so the reshaped project is itself a valid SE-demo project you can reset or switch again. A gateway dropped by the reshape is removed cleanly on the next `up` because the generated teardown uses `--remove-orphans`.
+It regenerates in place and re-records the result, so the reshaped project can be reset or switched again. A gateway dropped by the reshape is removed cleanly on the next `up` because the generated teardown uses `--remove-orphans`.
 
 A typical reshape loop:
 

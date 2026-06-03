@@ -1,4 +1,4 @@
-"""Regenerate an SE-demo project in place.
+"""Regenerate a project in place from its recorded config.
 
 ``reset`` and ``switch-profile`` both clear the previously-generated tree and
 re-run the writer. The lifecycle record (``.ignition-stack/``) and the modules
@@ -26,7 +26,7 @@ def regenerate(project_dir: Path, config: ProjectConfig) -> list[Path]:
     """Clear the generated tree (keeping primitives) and re-run the writer."""
     project_dir = Path(project_dir).resolve()
     _clear_generated(project_dir)
-    return write_project(config, project_dir, keep_cli=True, overwrite=True)
+    return write_project(config, project_dir, overwrite=True)
 
 
 def _clear_generated(project_dir: Path) -> None:

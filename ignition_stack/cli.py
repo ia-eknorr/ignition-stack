@@ -22,11 +22,18 @@ from ignition_stack import __version__
 from ignition_stack.commands.modules import modules_app
 from ignition_stack.completion import (
     complete_edge_role,
+    complete_output_format,
     complete_profile,
     complete_reverse_proxy,
 )
 from ignition_stack.compose import write_project
-from ignition_stack.config import ProjectConfig, ReverseProxyConfig
+from ignition_stack.config import (
+    ConfigIOError,
+    ProjectConfig,
+    ReverseProxyConfig,
+    dump_config,
+    load_config,
+)
 from ignition_stack.lifecycle import (
     LIFECYCLE_DIR,
     RECORD_NAME,
@@ -44,6 +51,7 @@ from ignition_stack.profiles import (
     get_profile,
     list_profiles,
 )
+from ignition_stack.services.resolver import resolve
 from ignition_stack.wizard import run_wizard
 
 app = typer.Typer(
@@ -150,15 +158,30 @@ def init(
         ),
         autocompletion=complete_edge_role,
     ),
-    keep_cli: bool = typer.Option(
-        False,
-        "--keep-cli",
+    from_file: Path | None = typer.Option(  # noqa: B008 - Typer pattern
+        None,
+        "--from-file",
+        "-f",
         help=(
-            "SE-demo mode: keep the lifecycle primitives in .ignition-stack/ so "
-            "`ignition-stack reset` / `switch-profile` can regenerate the project. "
-            "The default (one-shot) leaves a self-contained project with no CLI "
-            "primitives behind."
+            "Build from a saved config file (YAML or JSON, as dumped by "
+            "--dry-run) instead of a profile or the wizard. Mutually exclusive "
+            "with --profile. The project name argument overrides the file's name."
         ),
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help=(
+            "Resolve the config and print it (see --output-format) without "
+            "writing any files. The dump is the full build input; redirect it to "
+            "a file, edit it, and rebuild with --from-file."
+        ),
+    ),
+    output_format: str | None = typer.Option(
+        None,
+        "--output-format",
+        help="Format for the --dry-run dump: 'yaml' (default) or 'json'.",
+        autocompletion=complete_output_format,
     ),
     output_dir: Path | None = typer.Option(  # noqa: B008 - Typer pattern
         None,
@@ -169,10 +192,14 @@ def init(
 ) -> None:
     """Generate a new Ignition stack at ``<output-dir>/<name>``.
 
-    With ``--profile``, runs non-interactively from the named profile and its
-    flags. Without ``--profile``, walks the interactive wizard.
+    With ``--from-file``, builds from a saved config file. With ``--profile``,
+    runs non-interactively from the named profile and its flags. With neither,
+    walks the interactive wizard. ``--dry-run`` resolves the config and prints
+    it instead of writing anything.
     """
     target = ((output_dir or Path.cwd()) / name).resolve()
+
+    _validate_init_flags(profile=profile, from_file=from_file, dry_run=dry_run, fmt=output_format)
 
     # Name validation runs before either the wizard or the profile build so
     # invalid names fail fast with a clear exit code (2), instead of bubbling
@@ -183,7 +210,9 @@ def init(
         console.print(f"[red]error[/red]: invalid project name: {exc}")
         raise typer.Exit(code=2) from exc
 
-    if profile is None:
+    if from_file is not None:
+        config = _load_from_file(from_file, name)
+    elif profile is None:
         config = _run_wizard_or_exit(name)
     else:
         config = _build_from_profile(
@@ -198,14 +227,20 @@ def init(
             proxy_path=proxy_path,
         )
 
+    if dry_run:
+        # Dump the resolved config (the writer resolves too, so this is exactly
+        # what would be built) and write nothing. `end=""`/`markup=False` keep
+        # the output verbatim and parseable - no rich markup, no extra newline.
+        console.print(dump_config(resolve(config), output_format or "yaml"), end="", markup=False)
+        raise typer.Exit()
+
     try:
-        files = write_project(config, target, keep_cli=keep_cli)
+        files = write_project(config, target)
     except FileExistsError as exc:
         console.print(f"[red]error[/red]: {exc}")
         raise typer.Exit(code=1) from exc
 
-    mode = "SE-demo" if keep_cli else "one-shot"
-    console.print(f"[green]created[/green] {target} ([cyan]{mode}[/cyan])")
+    console.print(f"[green]created[/green] {target}")
     console.print(f"  {len(files)} file(s) written")
     console.print()
     console.print("Next steps:")
@@ -214,12 +249,56 @@ def init(
     console.print(
         f"  open http://localhost:{config.gateways[0].http_port}  (admin / {config.admin_password})"
     )
-    if keep_cli:
-        console.print()
+    console.print()
+    console.print(
+        f"  config recorded in {LIFECYCLE_DIR}/ - run `ignition-stack reset` to "
+        "regenerate or `switch-profile <name>` to reshape this stack."
+    )
+
+
+def _validate_init_flags(
+    *, profile: str | None, from_file: Path | None, dry_run: bool, fmt: str | None
+) -> None:
+    """Enforce the mutual-exclusion + flag-applicability rules, or exit code 2.
+
+    ``--from-file`` already fully specifies the topology, so combining it with
+    ``--profile`` is ambiguous and rejected. ``--output-format`` only shapes the
+    ``--dry-run`` dump, so passing it without ``--dry-run`` is a usage error
+    rather than a silent no-op. The value itself is validated against the two
+    supported formats here so a bad ``--output-format`` fails before any build.
+    """
+    if from_file is not None and profile is not None:
         console.print(
-            f"  primitives kept in {LIFECYCLE_DIR}/ - run `ignition-stack reset` to "
-            "regenerate or `switch-profile <name>` to reshape this stack."
+            "[red]error[/red]: --from-file cannot be combined with --profile; a "
+            "config file already specifies the full topology."
         )
+        raise typer.Exit(code=2)
+    if fmt is not None and not dry_run:
+        console.print("[red]error[/red]: --output-format only applies with --dry-run.")
+        raise typer.Exit(code=2)
+    if fmt is not None and fmt not in {"yaml", "json"}:
+        console.print(
+            f"[red]error[/red]: unsupported --output-format '{fmt}'; use 'yaml' or 'json'."
+        )
+        raise typer.Exit(code=2)
+
+
+def _load_from_file(from_file: Path, name: str) -> ProjectConfig:
+    """Load a config file, override its name with the CLI argument, or exit cleanly.
+
+    The project-name argument wins over the file's ``name`` so the same dumped
+    config can be rebuilt under a new name; everything else comes from the file.
+    A parse or validation failure surfaces as a readable error (exit code 2),
+    never a traceback.
+    """
+    try:
+        config = load_config(from_file)
+    except ConfigIOError as exc:
+        console.print(f"[red]error[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+    if config.name != name:
+        config = config.model_copy(update={"name": name})
+    return config
 
 
 def _build_from_profile(
@@ -279,14 +358,14 @@ def reset(
         Path("."),
         "--project-dir",
         "-C",
-        help="The generated SE-demo project to reset. Defaults to the current directory.",
+        help="The generated project to reset. Defaults to the current directory.",
     ),
 ) -> None:
-    """Regenerate an SE-demo project from its recorded config.
+    """Regenerate a project from its recorded config.
 
     Reads ``.ignition-stack/config.json``, clears the generated tree (keeping the
-    record and the modules cache), and re-runs generation. Only works on SE-demo
-    projects (``init --keep-cli``); a one-shot project has no record to reset from.
+    record and the modules cache), and re-runs generation. Works on any project
+    generated by this CLI; a directory without a record can't be reset.
     """
     project_dir = project_dir.resolve()
     try:
@@ -311,10 +390,10 @@ def switch_profile(
         Path("."),
         "--project-dir",
         "-C",
-        help="The generated SE-demo project to reshape. Defaults to the current directory.",
+        help="The generated project to reshape. Defaults to the current directory.",
     ),
 ) -> None:
-    """Reshape an SE-demo project under a different architecture profile.
+    """Reshape a project under a different architecture profile.
 
     Carries the recorded database, services, reverse-proxy, and edge intent over
     to the new profile, then regenerates in place and re-records the result.

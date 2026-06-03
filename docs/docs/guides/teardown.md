@@ -37,7 +37,7 @@ wipe:
   $(COMPOSE) -p $(PROJECT) down -v --remove-orphans
 ```
 
-`make wipe` works in any generated project, one-shot or SE-demo, because it needs nothing beyond the compose file and the baked-in name. It is the path to reach for when `ignition-stack` is not installed on the machine running the demo.
+`make wipe` works in any generated project because it needs nothing beyond the compose file and the baked-in name. It is the path to reach for when `ignition-stack` is not installed on the machine running the demo.
 
 ### `ignition-stack wipe`
 
@@ -50,8 +50,8 @@ ignition-stack wipe -C ./demo --dry-run  # print the command, run nothing
 
 `--dry-run` prints the exact `docker compose -p demo down -v --remove-orphans` it would execute, which is handy for confirming the scope before committing to it.
 
-To resolve the project name, `wipe` prefers an SE-demo project's recorded config and falls back to `COMPOSE_PROJECT_NAME` in `.env`. A one-shot project keeps no record, but its `.env` still carries the name, so `wipe` scopes correctly either way. Pointed at a directory that holds neither, it exits without guessing.
+To resolve the project name, `wipe` prefers the [configuration record](../concepts/configuration-record.md) and falls back to `COMPOSE_PROJECT_NAME` in `.env`. Even if the record is removed, the `.env` still carries the name, so `wipe` scopes correctly either way. Pointed at a directory that holds neither, it exits without guessing.
 
 ## What survives a wipe
 
-A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. For an SE-demo project the `.ignition-stack/` record survives too; pair `wipe` with [`reset`](./reset-and-reshape.md) to return to a clean baseline between customer sessions without re-walking the wizard.
+A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. The `.ignition-stack/` record survives too; pair `wipe` with [`reset`](./reset-and-reshape.md) to return to a clean baseline between customer sessions without re-walking the wizard.
