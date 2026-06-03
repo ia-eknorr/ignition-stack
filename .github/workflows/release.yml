@@ -1,0 +1,68 @@
+name: release
+
+# Publishes the CLI to PyPI when a GitHub Release is published. The release tag
+# is the trigger and the source of truth for the version: it must match the
+# version in pyproject.toml, so a tagged release and the published package can
+# never disagree. Authentication uses PyPI Trusted Publishing (OIDC) - there is
+# no API token stored in the repo. The one-time PyPI-side setup is documented in
+# docs/docs/contribute/releasing.md.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      # The release tag (e.g. v0.1.0) must match the version baked into the
+      # built wheel (0.1.0). Bumping the version is a deliberate edit in
+      # pyproject.toml; this guard turns a tag/version mismatch into a fast,
+      # legible failure instead of a confusing PyPI rejection or a package
+      # published under the wrong number. The wheel name is the source of
+      # truth, so this also catches a build that ignored the bump.
+      - name: Tag matches built version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(basename dist/*.whl | cut -d- -f2)"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::release tag '$GITHUB_REF_NAME' (-> $tag) does not match built version '$pkg'"
+            exit 1
+          fi
+          echo "tag and built version agree: $pkg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Gates the publish behind a named environment so PyPI Trusted Publishing
+    # can scope its trust to it and so a reviewer can require approval here.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ignition-stack
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1

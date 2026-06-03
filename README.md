@@ -11,12 +11,13 @@ See [`docs/docs/reference/seeding-matrix.md`](docs/docs/reference/seeding-matrix
 ## Install
 
 ```sh
-pipx install git+https://github.com/ia-eknorr/ignition-stack.git
+pipx install ignition-stack
 ```
 
-This pulls the latest released CLI off `main`. To track a branch:
+To install from source instead of PyPI - the latest off `main`, or a specific branch:
 
 ```sh
+pipx install git+https://github.com/ia-eknorr/ignition-stack.git
 pipx install git+https://github.com/ia-eknorr/ignition-stack.git@<branch>
 ```
 

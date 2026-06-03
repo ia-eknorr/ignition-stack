@@ -5,7 +5,7 @@ description: What the CI workflows prove on every pull request, the Linux compos
 
 # Continuous integration
 
-Two GitHub Actions workflows guard the project. Both run on pull requests and on pushes to `main`.
+Two GitHub Actions workflows guard the project on every change: `ci.yml` and `docs.yml`, both running on pull requests and on pushes to `main`. A third, `release.yml`, runs only when a GitHub Release is published and is covered in [Releasing to PyPI](./releasing.md).
 
 ## `ci.yml`: cross-platform generation
 

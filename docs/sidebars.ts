@@ -95,6 +95,7 @@ const sidebars: SidebarsConfig = {
         "contribute/add-a-service",
         "contribute/update-module-versions",
         "contribute/ci",
+        "contribute/releasing",
       ],
     },
   ],

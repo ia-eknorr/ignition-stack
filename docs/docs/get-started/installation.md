@@ -8,12 +8,13 @@ description: Install the ignition-stack CLI with pipx, and the Docker prerequisi
 `ignition-stack` is a Python CLI. Install it with [pipx](https://pipx.pypa.io/) so it lands in its own isolated environment:
 
 ```sh
-pipx install git+https://github.com/ia-eknorr/ignition-stack.git
+pipx install ignition-stack
 ```
 
-This installs the CLI from `main`. To track a branch instead:
+To install from source instead - the latest off `main`, or a specific branch:
 
 ```sh
+pipx install git+https://github.com/ia-eknorr/ignition-stack.git
 pipx install git+https://github.com/ia-eknorr/ignition-stack.git@<branch>
 ```
 
