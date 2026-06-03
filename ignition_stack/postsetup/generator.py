@@ -69,6 +69,13 @@ _REVERSE_PROXY_REASON = (
     "walks through installing ia-eknorr/traefik-reverse-proxy in front of the "
     "stack."
 )
+_REDUNDANCY_PAIRING_REASON = (
+    "This stack seeds redundancy fully: a pre-seeded redundancy.xml sets each "
+    "node's role and an open Gateway Network policy lets the plain link "
+    "auto-approve, so the pair forms with no UI clicks. This step is a "
+    "verification, not a manual procedure - confirm the pair came up, and reach "
+    "for the runbook only if it did not."
+)
 
 
 @dataclass(frozen=True)
@@ -121,6 +128,8 @@ def _collect_steps(config: ProjectConfig) -> list[_Step]:
 
     if config.profile == "scaleout":
         steps.append(_Step("gateway-network-link", _GATEWAY_NETWORK_LINK_REASON, ""))
+    if any(gw.redundancy is not None for gw in config.gateways):
+        steps.append(_Step("redundancy-pairing", _REDUNDANCY_PAIRING_REASON, ""))
     if config.mcp_dropin:
         steps.append(_Step("mcp-module", _MCP_MODULE_REASON, ""))
     if config.reverse_proxy is not None:
@@ -162,11 +171,40 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         "service": step.service,
         "gateway_url": gateways[0]["url"],
         "gateways": gateways,
+        "redundancy_pairs": _redundancy_pairs(config),
         "env_vars": env_vars,
         "env_map": dict(env_vars),
         "proxy_path": config.reverse_proxy.path if config.reverse_proxy else "",
         "dropin_dir": "modules/dropin",
     }
+
+
+def _redundancy_pairs(config: ProjectConfig) -> list[dict[str, object]]:
+    """Master/backup pairs in the stack, for the redundancy-pairing step.
+
+    Keyed off each backup so a partial (master-only) config contributes nothing;
+    each entry names both nodes, their UIs, and the Gateway Network port the
+    redundancy link rides.
+    """
+    by_name = {gw.name: gw for gw in config.gateways}
+    pairs: list[dict[str, object]] = []
+    for gw in config.gateways:
+        if gw.redundancy is None or gw.redundancy.mode != "backup":
+            continue
+        master = by_name.get(gw.redundancy.peer)
+        if master is None:
+            continue
+        pairs.append(
+            {
+                "master": master.name,
+                "backup": gw.name,
+                "master_url": f"http://localhost:{master.http_port}",
+                "backup_url": f"http://localhost:{gw.http_port}",
+                "gan_port": gw.redundancy.gan_port,
+                "edition": master.ignition_edition,
+            }
+        )
+    return pairs
 
 
 def _render_step(env: Environment, ctx: dict[str, object]) -> str:

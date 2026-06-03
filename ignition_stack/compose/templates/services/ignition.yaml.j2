@@ -22,8 +22,22 @@
     ACCEPT_MODULE_LICENSES: "{{ module_identifiers }}"
     ACCEPT_MODULE_CERTS: "{{ module_identifiers }}"
 {%- endif %}
+{%- if redundant %}
+    GATEWAY_NETWORK_ENABLED: "true"
+    GATEWAY_NETWORK_ALLOWINCOMING: "true"
+    GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
+    GATEWAY_NETWORK_REQUIRESSL: "false"
+    GATEWAY_NETWORK_REQUIRETWOWAYAUTH: "false"
+{%- endif %}
+{%- if gan_peer_host %}
+    GATEWAY_NETWORK_0_HOST: "{{ gan_peer_host }}"
+    GATEWAY_NETWORK_0_PORT: "{{ gan_port }}"
+    GATEWAY_NETWORK_0_ENABLESSL: "false"
+{%- endif %}
   command: >
+{%- if rename %}
     -n {{ gateway_name_ref }}
+{%- endif %}
     -m {{ memory_mb }}
     --
     -Dignition.config.mode=dev

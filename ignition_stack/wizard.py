@@ -22,8 +22,11 @@ Step order:
 5. **Network split** - for the multi-gateway profiles (scaleout +
    hub-and-spoke), whether to split frontend/backend onto separate
    networks. Defaults on for scaleout, off for hub-and-spoke.
-6. **Reverse proxy** - existing/install-Traefik/skip.
-7. **Summary + confirm**.
+6. **Redundancy** - for profiles with a single workhorse role (standalone
+   gateway, scaleout backend, hub-and-spoke hub), whether to add a backup
+   node and form a master/backup pair. Defaults off.
+7. **Reverse proxy** - existing/install-Traefik/skip.
+8. **Summary + confirm**.
 
 Per-gateway env-var overrides (``memory_mb`` etc.) are deferred to Phase 7
 when the lifecycle/reset commands need them; the gateway model already
@@ -71,6 +74,15 @@ _MULTI_GATEWAY_PROFILES = frozenset({"scaleout", "hub-and-spoke"})
 _DEFAULT_NETWORK_SPLIT: dict[str, bool] = {
     "scaleout": True,
     "hub-and-spoke": False,
+}
+
+# The single workhorse role each profile can make redundant (master + backup).
+# Replicated tiers (frontends, spokes) are deliberately absent - they scale
+# out, they don't fail over. Profiles not listed here skip the prompt.
+_REDUNDANCY_ROLE: dict[str, str] = {
+    "standalone": "gateway",
+    "scaleout": "backend",
+    "hub-and-spoke": "hub",
 }
 
 
@@ -149,6 +161,7 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     db_kind = _ask_database(prompter)
     edge_role = _ask_edge_role(prompter, profile_slug)
     network_split = _ask_network_split(prompter, profile_slug)
+    redundant_role = _ask_redundancy(prompter, profile_slug)
     reverse_proxy = _ask_reverse_proxy(prompter)
 
     options = ProfileOptions(
@@ -159,6 +172,7 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
         network_split=network_split,
         reverse_proxy=reverse_proxy,
         database_kind=db_kind,
+        redundant_role=redundant_role,
     )
 
     # Hub-and-spoke advisory: ask the user inside the wizard rather than
@@ -222,6 +236,23 @@ def _ask_network_split(prompter: Prompter, profile_slug: str) -> bool | None:
     return prompter.confirm(
         "Split frontend/backend onto separate Docker networks?", default=default
     )
+
+
+def _ask_redundancy(prompter: Prompter, profile_slug: str) -> str | None:
+    """Offer to make the profile's workhorse role redundant (master + backup).
+
+    Only profiles with a single pairable role prompt; the rest return ``None``.
+    Defaults off - redundancy doubles the gateway count and needs two licenses,
+    so it is opt-in.
+    """
+    role = _REDUNDANCY_ROLE.get(profile_slug)
+    if role is None:
+        return None
+    make = prompter.confirm(
+        f"Make the {role} gateway redundant (adds a backup node, master/backup pair)?",
+        default=False,
+    )
+    return role if make else None
 
 
 def _ask_database(prompter: Prompter) -> str | None:
@@ -322,6 +353,8 @@ def _summarize(config: ProjectConfig, profile_slug: str, options: ProfileOptions
         f"database     : {config.database.kind if config.database else 'none'}",
         f"services     : {', '.join(config.services) if config.services else '(none)'}",
         f"network split: {'on' if config.network_split else 'off'}",
+        "redundancy   : "
+        + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
         "reverse proxy: "
         + (
             f"install Traefik at './{config.reverse_proxy.path}'"

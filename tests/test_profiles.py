@@ -521,6 +521,7 @@ def test_install_traefik_wizard_branch(tmp_path: Path) -> None:
             "standalone",  # profile
             "postgres",  # database
             "none",  # edge_role
+            False,  # redundancy
             "install",  # reverse proxy
             "reverse-proxy",  # path
             True,  # summary confirm
@@ -545,6 +546,7 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
             "postgres",  # database
             "spoke",  # edge_role
             False,  # network split (off for hub-and-spoke)
+            False,  # redundancy
             "external",  # proxy
             True,  # advisory confirm
             True,  # summary confirm
@@ -564,6 +566,7 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
             "postgres",
             "spoke",
             False,  # network split
+            False,  # redundancy
             "external",
             False,  # decline advisory
             True,  # summary confirm
@@ -583,6 +586,7 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
             "postgres",
             "spoke",
             False,  # network split
+            False,  # redundancy
             "external",
             True,  # acknowledge red
             True,  # summary confirm
@@ -602,6 +606,7 @@ def test_wizard_red_tier_declined_falls_back() -> None:
             "postgres",
             "spoke",
             False,  # network split
+            False,  # redundancy
             "external",
             False,  # decline red
             True,  # summary confirm
@@ -623,6 +628,7 @@ def test_wizard_scaleout_frontends_and_network_split() -> None:
             "postgres",  # database
             "none",  # edge_role
             True,  # network split
+            False,  # redundancy
             "external",  # reverse proxy
             True,  # summary confirm
         ]
@@ -643,6 +649,7 @@ def test_wizard_scaleout_network_split_declined() -> None:
             "postgres",
             "none",
             False,  # network split off
+            False,  # redundancy
             "external",
             True,
         ]
@@ -658,6 +665,7 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
             "standalone",
             "postgres",
             "none",
+            False,  # redundancy
             "external",
             False,  # decline at summary
         ]

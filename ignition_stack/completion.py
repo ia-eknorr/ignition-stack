@@ -44,6 +44,18 @@ def complete_reverse_proxy(incomplete: str) -> list[str]:
     return [kind for kind in REVERSE_PROXY_VALUES if kind.startswith(incomplete)]
 
 
+# Roles `init --redundant` can pair. Only the singleton workhorse roles are
+# eligible (a scaleout 'backend', a hub-and-spoke 'hub', a standalone
+# 'gateway'); replicated 'frontend'/'spoke' tiers are rejected by the profile
+# builder, so they are intentionally absent here.
+REDUNDANT_ROLE_VALUES = ("backend", "hub", "gateway")
+
+
+def complete_redundant_role(incomplete: str) -> list[str]:
+    """Redundancy-eligible role names matching the typed prefix."""
+    return [role for role in REDUNDANT_ROLE_VALUES if role.startswith(incomplete)]
+
+
 # Serialization formats `init --dry-run --output-format` accepts. Mirrors the
 # `Format` literal in config/io.py; kept here as the completion vocabulary.
 OUTPUT_FORMAT_VALUES = ("yaml", "json")

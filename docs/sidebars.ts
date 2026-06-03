@@ -84,6 +84,7 @@ const sidebars: SidebarsConfig = {
       items: [
         "guides/reset-and-reshape",
         "guides/declarative-config",
+        "guides/redundancy",
         "guides/teardown",
       ],
     },

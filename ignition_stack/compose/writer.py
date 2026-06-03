@@ -24,6 +24,8 @@ from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
+from jinja2 import Environment, PackageLoader, StrictUndefined
+
 from ignition_stack.catalog.loader import CatalogLoadError, load_catalog
 from ignition_stack.catalog.schema import Catalog
 from ignition_stack.compose.engine import render_compose
@@ -76,6 +78,7 @@ def write_project(
     written.extend(_copy_static_tree(config, target_dir))
     written.extend(_copy_service_seeds(config, target_dir))
     written.extend(_overlay_gateway_resources(config, target_dir))
+    written.extend(_write_redundancy_seeds(config, target_dir))
     _ensure_modules_cache_dir(config, target_dir)
     written.append(_write_compose(config, target_dir))
     written.append(_write_env(config, target_dir))
@@ -134,6 +137,48 @@ def _overlay_gateway_resources(config: ProjectConfig, target_dir: Path) -> list[
                     _write_static(target_dir, f"services/{gw_dir}/{rel}", content, executable)
                 )
     return written
+
+
+def _write_redundancy_seeds(config: ProjectConfig, target_dir: Path) -> list[Path]:
+    """Drop a per-node ``redundancy.xml`` into each redundant gateway's tree.
+
+    Per the Phase-3 spike, nothing sets the redundancy *role* via env var, so a
+    pre-seeded ``data/redundancy.xml`` is what makes a node a master or backup.
+    The file lands at ``services/<gateway>/redundancy.xml`` (the gateway's
+    template-source root); the bootstrap copies it to the data-volume root on
+    first boot. Master and backup differ only in ``noderole`` and ``gan.host``;
+    the backup points its host at the master's service name. Generated stacks
+    use the plain (non-SSL) link on port 8088, which auto-approves without the
+    certificate handshake the SSL path (8060) would force.
+    """
+    env = _redundancy_jinja_env()
+    template = env.get_template("redundancy.xml.j2")
+    written: list[Path] = []
+    for gw in config.gateways:
+        red = gw.redundancy
+        if red is None or not red.seed_redundancy_xml:
+            continue
+        is_master = red.mode == "master"
+        rendered = template.render(
+            noderole="Master" if is_master else "Backup",
+            # The master listens; the backup connects to the master's service
+            # name. An empty host on the master matches the verified seed file.
+            gan_host="" if is_master else red.peer,
+            gan_port=red.gan_port,
+            enable_ssl="true" if red.gan_port == 8060 else "false",
+        )
+        rel = f"services/{gw.name}/redundancy.xml"
+        written.append(_write_static(target_dir, rel, rendered.encode(), False))
+    return written
+
+
+def _redundancy_jinja_env() -> Environment:
+    return Environment(
+        loader=PackageLoader("ignition_stack.templates", "redundancy"),
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
+        autoescape=False,
+    )
 
 
 def _seed_sources(config: ProjectConfig) -> list[tuple[object, str]]:

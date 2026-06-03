@@ -24,6 +24,7 @@ from ignition_stack.completion import (
     complete_edge_role,
     complete_output_format,
     complete_profile,
+    complete_redundant_role,
     complete_reverse_proxy,
 )
 from ignition_stack.compose import write_project
@@ -158,6 +159,17 @@ def init(
         ),
         autocompletion=complete_edge_role,
     ),
+    redundant: str | None = typer.Option(
+        None,
+        "--redundant",
+        help=(
+            "Make a single gateway role redundant, expanding it into a master + "
+            "backup pair (e.g. 'backend' for scaleout, 'hub' for hub-and-spoke, "
+            "'gateway' for standalone). Frontends and spokes are replicated, not "
+            "paired, and are rejected."
+        ),
+        autocompletion=complete_redundant_role,
+    ),
     from_file: Path | None = typer.Option(  # noqa: B008 - Typer pattern
         None,
         "--from-file",
@@ -225,6 +237,7 @@ def init(
             network_split=network_split,
             reverse_proxy=reverse_proxy,
             proxy_path=proxy_path,
+            redundant=redundant,
         )
 
     if dry_run:
@@ -312,6 +325,7 @@ def _build_from_profile(
     network_split: bool | None,
     reverse_proxy: str | None,
     proxy_path: str,
+    redundant: str | None,
 ) -> ProjectConfig:
     """Materialize a config from the named profile + CLI flags, or exit cleanly."""
     try:
@@ -328,6 +342,7 @@ def _build_from_profile(
         edge_role=edge_role,
         network_split=network_split,
         reverse_proxy=proxy,
+        redundant_role=redundant,
     )
     try:
         config = build_profile(profile, name, options)
@@ -438,6 +453,17 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
     edge_roles = [gw.role or gw.name for gw in config.gateways if gw.ignition_edition == "edge"]
     spoke_count = sum(1 for gw in config.gateways if (gw.role or "") == "spoke")
     frontend_count = sum(1 for gw in config.gateways if (gw.role or "") == "frontend")
+    # Redundancy intent is carried by the master node (the backup is re-derived
+    # by the resolver), so recover the role/name of whichever gateway is the
+    # master and let the new profile re-expand the pair.
+    redundant_role = next(
+        (
+            gw.role or gw.name
+            for gw in config.gateways
+            if gw.redundancy is not None and gw.redundancy.mode == "master"
+        ),
+        None,
+    )
     return ProfileOptions(
         spokes=spoke_count or 3,
         frontends=frontend_count or 1,
@@ -446,6 +472,7 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
         reverse_proxy=config.reverse_proxy,
         database_kind=config.database.kind if config.database else None,
         services=tuple(config.services),
+        redundant_role=redundant_role,
     )
 
 

@@ -57,6 +57,15 @@ if [ ! -f "${DATA_DIR}/.ignition-seed-complete" ]; then
     cp /modules-cache/*.jar "${DATA_DIR}/user-lib/jdbc/" 2>/dev/null || true
   fi
 
+  # Seed redundancy.xml into the data root when this gateway is part of a
+  # master/backup pair. It lives at the data root (not under config/resources/),
+  # and it is what sets the redundancy role - no env var does. Absent for
+  # non-redundant gateways, so this is a no-op there.
+  if [ -f "${TEMPLATE_SRC}/redundancy.xml" ]; then
+    echo "Seeding redundancy.xml -> ${DATA_DIR}/redundancy.xml"
+    cp "${TEMPLATE_SRC}/redundancy.xml" "${DATA_DIR}/redundancy.xml"
+  fi
+
   # Hand ownership of everything in /data to the ignition user (uid 2003)
   # so the gateway can write its .resources/ caches and any UI-driven changes.
   chown -R 2003:2003 "${DATA_DIR}"

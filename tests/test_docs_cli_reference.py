@@ -121,6 +121,7 @@ def test_cli_reference_covers_every_option() -> None:
         "services/n8n.md",
         "guides/reset-and-reshape.md",
         "guides/declarative-config.md",
+        "guides/redundancy.md",
         "guides/teardown.md",
         "reference/cli.md",
         "reference/seeding-matrix.md",
