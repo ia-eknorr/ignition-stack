@@ -13,6 +13,7 @@ interactive wizard when no profile is named.
 from __future__ import annotations
 
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -49,6 +50,7 @@ from ignition_stack.profiles import (
     ProfileError,
     ProfileOptions,
     build_profile,
+    can_host_redundant_role,
     get_profile,
     list_profiles,
 )
@@ -427,6 +429,19 @@ def switch_profile(
         raise typer.Exit(code=2) from exc
 
     options = _options_from_config(current)
+    # Redundancy is pinned to a profile-specific role (e.g. standalone's
+    # 'gateway'), which the target profile may not have. Building its base
+    # topology lets us check before build_profile's mark_redundant would reject
+    # it - drop the intent with an advisory rather than failing the reshape.
+    if options.redundant_role is not None and not can_host_redundant_role(
+        get_profile(profile).build(current.name, options), options.redundant_role
+    ):
+        console.print(
+            f"[yellow]note[/yellow]: redundancy on '{options.redundant_role}' was not "
+            f"carried to {profile} (no matching gateway); re-apply with --redundant "
+            "if the new topology has a role to pair"
+        )
+        options = replace(options, redundant_role=None)
     try:
         new_config = build_profile(profile, current.name, options)
     except ProfileError as exc:

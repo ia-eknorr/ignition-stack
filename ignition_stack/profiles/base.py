@@ -132,6 +132,29 @@ def list_profiles() -> list[Profile]:
 _NON_REDUNDANT_ROLES = frozenset({"frontend", "spoke"})
 
 
+def _matching_gateways(config: ProjectConfig, redundant_role: str) -> list:
+    """Gateways a redundant role names, matched by role or name.
+
+    The single matching rule shared by :func:`mark_redundant` (which errors on a
+    bad match) and :func:`can_host_redundant_role` (which only reports), so the
+    two can never drift on what "matches" means.
+    """
+    return [gw for gw in config.gateways if redundant_role in (gw.role, gw.name)]
+
+
+def can_host_redundant_role(config: ProjectConfig, redundant_role: str) -> bool:
+    """True when ``config`` has exactly one gateway that can be paired as master.
+
+    ``switch-profile`` uses this to decide whether redundancy intent recovered
+    from the old stack can carry to the target profile, without raising the way
+    :func:`mark_redundant` does - a profile-specific role (e.g. standalone's
+    ``gateway``) simply may not exist in the destination.
+    """
+    if redundant_role in _NON_REDUNDANT_ROLES:
+        return False
+    return len(_matching_gateways(config, redundant_role)) == 1
+
+
 def mark_redundant(config: ProjectConfig, redundant_role: str | None) -> ProjectConfig:
     """Stamp the gateway named/roled ``redundant_role`` as a redundancy master.
 
@@ -152,7 +175,7 @@ def mark_redundant(config: ProjectConfig, redundant_role: str | None) -> Project
             "redundancy applies to a single gateway (e.g. a scaleout 'backend' "
             "or a hub-and-spoke 'hub'), never to frontends or spokes"
         )
-    matches = [gw for gw in config.gateways if redundant_role in (gw.role, gw.name)]
+    matches = _matching_gateways(config, redundant_role)
     if not matches:
         known = ", ".join(sorted({gw.role or gw.name for gw in config.gateways}))
         raise ValueError(

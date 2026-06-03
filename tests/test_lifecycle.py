@@ -108,6 +108,22 @@ def test_switch_profile_reshapes_and_rerecords(runner: CliRunner, tmp_path: Path
     assert (project / "services" / "ignition").is_dir()
 
 
+def test_switch_profile_drops_unhostable_redundancy(runner: CliRunner, tmp_path: Path) -> None:
+    # A redundant standalone pins redundancy to the 'gateway' role, which the
+    # scaleout topology (frontend/backend) has no place for. The reshape must
+    # succeed and drop the intent with an advisory - not fail with exit 2.
+    project = _init(runner, tmp_path, "--redundant", "gateway")
+    assert any(gw.redundancy is not None for gw in read_record(project).gateways)
+
+    result = runner.invoke(app, ["switch-profile", "scaleout", "-C", str(project)])
+
+    assert result.exit_code == 0, result.stdout
+    assert "redundancy on 'gateway' was not carried" in result.stdout
+    record = read_record(project)
+    assert record.profile == "scaleout"
+    assert all(gw.redundancy is None for gw in record.gateways)
+
+
 # --------------------------------------------------------------------------- #
 # Scoped wipe                                                                  #
 # --------------------------------------------------------------------------- #
