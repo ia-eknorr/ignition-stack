@@ -119,6 +119,9 @@ class ScriptedPrompter:
     def integer(self, message: str, default: int, minimum: int = 0) -> int:
         return self._next()
 
+    def checkbox(self, message: str, choices: Sequence[tuple[str, str]]) -> list:
+        return self._next()
+
 
 # --------------------------------------------------------------------------- #
 # Registry: the four profile slugs exist with stable summaries
@@ -451,6 +454,7 @@ def test_mcp_n8n_wizard_flow_writes_expected_project(tmp_path: Path) -> None:
             "mcp-n8n",  # profile
             "postgres",  # database
             "none",  # edge_role
+            False,  # disable built-ins?
             "external",  # reverse proxy
             True,  # summary confirm
         ]
@@ -522,6 +526,7 @@ def test_install_traefik_wizard_branch(tmp_path: Path) -> None:
             "postgres",  # database
             "none",  # edge_role
             False,  # redundancy
+            False,  # disable built-ins?
             "install",  # reverse proxy
             "reverse-proxy",  # path
             True,  # summary confirm
@@ -547,6 +552,7 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
             "spoke",  # edge_role
             False,  # network split (off for hub-and-spoke)
             False,  # redundancy
+            False,  # disable built-ins?
             "external",  # proxy
             True,  # advisory confirm
             True,  # summary confirm
@@ -567,6 +573,7 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
             "spoke",
             False,  # network split
             False,  # redundancy
+            False,  # disable built-ins?
             "external",
             False,  # decline advisory
             True,  # summary confirm
@@ -587,6 +594,7 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
             "spoke",
             False,  # network split
             False,  # redundancy
+            False,  # disable built-ins?
             "external",
             True,  # acknowledge red
             True,  # summary confirm
@@ -607,6 +615,7 @@ def test_wizard_red_tier_declined_falls_back() -> None:
             "spoke",
             False,  # network split
             False,  # redundancy
+            False,  # disable built-ins?
             "external",
             False,  # decline red
             True,  # summary confirm
@@ -629,6 +638,7 @@ def test_wizard_scaleout_frontends_and_network_split() -> None:
             "none",  # edge_role
             True,  # network split
             False,  # redundancy
+            False,  # disable built-ins?
             "external",  # reverse proxy
             True,  # summary confirm
         ]
@@ -650,6 +660,7 @@ def test_wizard_scaleout_network_split_declined() -> None:
             "none",
             False,  # network split off
             False,  # redundancy
+            False,  # disable built-ins?
             "external",
             True,
         ]
@@ -666,12 +677,59 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
             "postgres",
             "none",
             False,  # redundancy
+            False,  # disable built-ins?
             "external",
             False,  # decline at summary
         ]
     )
     outcome = walk("demo", prompter)
     assert outcome.confirmed is False
+
+
+def test_wizard_disable_builtins_flows_to_every_gateway() -> None:
+    """Saying yes to the disable prompt and toggling modules stamps the slugs
+    onto each gateway and surfaces them in the summary."""
+    prompter = ScriptedPrompter(
+        [
+            "scaleout",  # profile
+            1,  # frontend count
+            "postgres",  # database
+            "none",  # edge_role
+            True,  # network split
+            False,  # redundancy
+            True,  # disable built-ins? -> opens checkbox
+            ["vision", "sfc"],  # checkbox selection
+            "external",  # reverse proxy
+            True,  # summary confirm
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed
+    assert outcome.options.disable_builtins == ("vision", "sfc")
+    # Applied uniformly: every gateway carries the same disable list.
+    for gw in outcome.config.gateways:
+        assert gw.disable_builtins == ["vision", "sfc"]
+    assert any("vision, sfc" in line for line in outcome.summary_lines)
+
+
+def test_wizard_disable_builtins_declined_keeps_all_on() -> None:
+    """Declining the disable prompt never calls the checkbox and leaves the
+    gateway's disable list empty (no whitelist emitted downstream)."""
+    prompter = ScriptedPrompter(
+        [
+            "standalone",
+            "postgres",
+            "none",  # edge_role
+            False,  # redundancy
+            False,  # disable built-ins? -> no checkbox
+            "external",
+            True,  # summary confirm
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed
+    assert outcome.options.disable_builtins == ()
+    assert all(gw.disable_builtins == [] for gw in outcome.config.gateways)
 
 
 # --------------------------------------------------------------------------- #

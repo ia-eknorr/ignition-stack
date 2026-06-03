@@ -86,6 +86,14 @@ class ProfileOptions:
     workhorse role (scaleout 'backend', hub-and-spoke 'hub', standalone
     'gateway'); replicated tiers ('frontend', 'spoke') are rejected."""
 
+    disable_builtins: tuple[str, ...] = ()
+    """Built-in module slugs to turn off on every gateway in the stack.
+
+    Empty (default) leaves all built-ins on. Applied uniformly by
+    ``build_profile`` - the demo intent is "drop Vision/SFC everywhere", and
+    per-gateway disabling stays a declarative-config-only feature. Slugs are
+    validated against builtin_modules.yaml by ``GatewayConfig``."""
+
 
 class Profile(Protocol):
     """A factory that turns ``ProfileOptions`` into a ``ProjectConfig``."""
@@ -200,4 +208,29 @@ def build_profile(slug: str, name: str, options: ProfileOptions) -> ProjectConfi
     means one eligibility rule serves every profile and the wizard alike.
     """
     config = get_profile(slug).build(name, options)
-    return mark_redundant(config, options.redundant_role)
+    config = mark_redundant(config, options.redundant_role)
+    return apply_disable_builtins(config, options.disable_builtins)
+
+
+def apply_disable_builtins(
+    config: ProjectConfig, disable_builtins: tuple[str, ...]
+) -> ProjectConfig:
+    """Stamp ``disable_builtins`` onto every gateway in ``config``.
+
+    Applied centrally (like :func:`mark_redundant`) so one rule serves every
+    profile and the wizard. Uniform across gateways: the demo intent is to drop
+    a module everywhere, and a redundant pair must agree on its module set. The
+    resolver later copies the list onto any expanded backup node.
+    """
+    if not disable_builtins:
+        return config
+    # pydantic does not re-validate on attribute assignment, so validate here -
+    # this is the wizard/CLI choke point (the declarative path is checked at
+    # construction). Raises ValueError on an unknown slug; the CLI maps that to
+    # exit code 2.
+    from ignition_stack.catalog.builtins import validate_disable_slugs
+
+    validate_disable_slugs(list(disable_builtins))
+    for gw in config.gateways:
+        gw.disable_builtins = list(disable_builtins)
+    return config

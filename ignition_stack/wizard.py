@@ -25,8 +25,11 @@ Step order:
 6. **Redundancy** - for profiles with a single workhorse role (standalone
    gateway, scaleout backend, hub-and-spoke hub), whether to add a backup
    node and form a master/backup pair. Defaults off.
-7. **Reverse proxy** - existing/install-Traefik/skip.
-8. **Summary + confirm**.
+7. **Disable built-ins** - opt-in multi-select to turn off built-in IA
+   modules (Vision, SFC, ...) stack-wide via GATEWAY_MODULES_ENABLED.
+   Gated behind a confirm; defaults to keeping everything.
+8. **Reverse proxy** - existing/install-Traefik/skip.
+9. **Summary + confirm**.
 
 Per-gateway env-var overrides (``memory_mb`` etc.) are deferred to Phase 7
 when the lifecycle/reset commands need them; the gateway model already
@@ -117,6 +120,10 @@ class Prompter(Protocol):
     def integer(self, message: str, default: int, minimum: int = 0) -> int:
         """Integer prompt; validates ``>= minimum`` and returns the parsed value."""
 
+    def checkbox(self, message: str, choices: Sequence[tuple[str, str]]) -> list[str]:
+        """Multi-select prompt. ``choices`` is ``(value, label)`` pairs; returns
+        the list of chosen ``value``\\ s (possibly empty - nothing toggled)."""
+
 
 @dataclass
 class WizardOutcome:
@@ -162,6 +169,7 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     edge_role = _ask_edge_role(prompter, profile_slug)
     network_split = _ask_network_split(prompter, profile_slug)
     redundant_role = _ask_redundancy(prompter, profile_slug)
+    disable_builtins = _ask_disable_builtins(prompter)
     reverse_proxy = _ask_reverse_proxy(prompter)
 
     options = ProfileOptions(
@@ -173,6 +181,7 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
         reverse_proxy=reverse_proxy,
         database_kind=db_kind,
         redundant_role=redundant_role,
+        disable_builtins=disable_builtins,
     )
 
     # Hub-and-spoke advisory: ask the user inside the wizard rather than
@@ -253,6 +262,28 @@ def _ask_redundancy(prompter: Prompter, profile_slug: str) -> str | None:
         default=False,
     )
     return role if make else None
+
+
+def _ask_disable_builtins(prompter: Prompter) -> tuple[str, ...]:
+    """Optionally pick built-in modules to turn off across the stack.
+
+    Gated behind a confirm so the common path (keep everything) is one
+    keystroke and nobody is forced to scroll a 29-item checklist. Saying yes
+    opens a multi-select of every built-in (alphabetical by display name);
+    whatever is toggled becomes the stack-wide ``disable_builtins``.
+    """
+    if not prompter.confirm(
+        "Disable any built-in gateway modules (e.g. Vision, SFC)?", default=False
+    ):
+        return ()
+    from ignition_stack.catalog.builtins import default_builtin_catalog
+
+    catalog = default_builtin_catalog()
+    choices = [(m.slug, m.name) for m in sorted(catalog.modules, key=lambda m: m.name.lower())]
+    chosen = prompter.checkbox(
+        "Select modules to DISABLE (space toggles, enter confirms):", choices
+    )
+    return tuple(chosen)
 
 
 def _ask_database(prompter: Prompter) -> str | None:
@@ -355,6 +386,8 @@ def _summarize(config: ProjectConfig, profile_slug: str, options: ProfileOptions
         f"network split: {'on' if config.network_split else 'off'}",
         "redundancy   : "
         + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
+        "disabled mods: "
+        + (", ".join(options.disable_builtins) if options.disable_builtins else "(none - all on)"),
         "reverse proxy: "
         + (
             f"install Traefik at './{config.reverse_proxy.path}'"
@@ -429,3 +462,11 @@ class QuestionaryPrompter:
 
         answer = questionary.text(message, default=str(default), validate=_validate).unsafe_ask()
         return int(answer)
+
+    def checkbox(self, message: str, choices: Sequence[tuple[str, str]]) -> list[str]:
+        import questionary
+
+        q_choices = [questionary.Choice(title=label, value=value) for value, label in choices]
+        answer = questionary.checkbox(message, choices=q_choices).unsafe_ask()
+        # Questionary returns None on Ctrl-C and a list otherwise; normalize.
+        return [str(a) for a in (answer or [])]

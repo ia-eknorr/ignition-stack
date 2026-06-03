@@ -22,6 +22,9 @@
     ACCEPT_MODULE_LICENSES: "{{ module_identifiers }}"
     ACCEPT_MODULE_CERTS: "{{ module_identifiers }}"
 {%- endif %}
+{%- if disable_active %}
+    GATEWAY_MODULES_ENABLED: "{{ modules_enabled }}"
+{%- endif %}
 {%- if redundant %}
     GATEWAY_NETWORK_ENABLED: "true"
     GATEWAY_NETWORK_ALLOWINCOMING: "true"

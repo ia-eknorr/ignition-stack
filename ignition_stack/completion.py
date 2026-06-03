@@ -77,3 +77,18 @@ def complete_module_name(incomplete: str) -> list[str]:
         # catalog must degrade to "no suggestions", never break the shell line.
         return []
     return [entry.name for entry in entries if entry.name.startswith(incomplete)]
+
+
+def complete_disable_builtin(incomplete: str) -> list[tuple[str, str]]:
+    """Built-in module slugs (with display name) matching the typed prefix.
+
+    Reads the bundled built-in catalog; degrades to no suggestions on any error
+    so a TAB never breaks the shell line.
+    """
+    try:
+        from ignition_stack.catalog.builtins import default_builtin_catalog
+
+        modules = default_builtin_catalog().modules
+    except Exception:
+        return []
+    return [(m.slug, m.name) for m in modules if m.slug.startswith(incomplete)]

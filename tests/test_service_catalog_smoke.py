@@ -149,8 +149,8 @@ def test_generated_stack_boots_and_seeds_db_connection(smoke_stack: Path) -> Non
             # "shows configured" = the seeded db-connection is listed; we do not
             # require VALID status because the lifted secret may not match the
             # preset password (the matrix marks the *config* file-seedable).
-            assert "db" in body and "PostgreSQL" in body, (
-                "seeded db-connection not shown in the gateway UI"
-            )
+            assert (
+                "db" in body and "PostgreSQL" in body
+            ), "seeded db-connection not shown in the gateway UI"
         finally:
             browser.close()

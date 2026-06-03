@@ -312,10 +312,9 @@ def test_bootstrap_script_drops_cached_modules_into_user_lib() -> None:
 
     # Read the vendored bootstrap script directly so we assert against the
     # source-of-truth artifact, not an indirect rendering.
-    script = (
-        _P("ignition_stack/templates/standalone-postgres/scripts/docker-bootstrap.sh")
-        .read_text(encoding="utf-8")
-    )
+    script = _P(
+        "ignition_stack/templates/standalone-postgres/scripts/docker-bootstrap.sh"
+    ).read_text(encoding="utf-8")
     assert "/modules-cache" in script, "bootstrap must check for /modules-cache mount"
     assert "user-lib/modules" in script, "bootstrap must drop modules into user-lib/modules"
 

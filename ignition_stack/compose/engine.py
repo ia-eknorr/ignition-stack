@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from ruamel.yaml import YAML
 
+from ignition_stack.catalog.builtins import default_builtin_catalog
 from ignition_stack.services.loader import load_all_services, load_service
 
 if TYPE_CHECKING:
@@ -280,6 +281,11 @@ def _ignition_context(
         "memory_mb": gw.memory_mb,
         "edition_override": edition_override,
         "module_identifiers": ctx["module_identifiers"],
+        # disable_active drives template emission (not the value's truthiness) so
+        # that disabling EVERY built-in emits an empty whitelist - which quarantines
+        # all, matching intent - instead of omitting the var and re-enabling all.
+        "disable_active": bool(gw.disable_builtins),
+        "modules_enabled": _modules_enabled_for(gw, ctx["module_identifiers"]),  # type: ignore[arg-type]
         "database_service": config.database.name if config.database else None,
         "networks": ctx["networks"],
         "redundant": is_redundant,
@@ -312,6 +318,29 @@ def _module_identifiers_for(gw: GatewayConfig, catalog: Catalog | None) -> str:
             continue
         identifiers.append(entry.module_identifier)  # type: ignore[union-attr]
     return ",".join(identifiers)
+
+
+def _modules_enabled_for(gw: GatewayConfig, module_identifiers: str) -> str:
+    """The GATEWAY_MODULES_ENABLED whitelist VALUE for this gateway.
+
+    GATEWAY_MODULES_ENABLED is a strict whitelist: if set, every built-in not
+    listed is quarantined at boot. The template emits the var based on
+    ``disable_active`` (whether any built-in was disabled), not on this value's
+    truthiness - so disabling every built-in yields an empty string here and an
+    empty whitelist downstream (quarantines all), rather than silently omitting
+    the var and re-enabling everything.
+
+    When something is disabled the whitelist must be complete: every built-in the
+    user did not disable, PLUS any third-party modules we added
+    (``module_identifiers``) - or those added modules would be quarantined too.
+    Returns '' when nothing is disabled (the var is omitted in that case).
+    """
+    if not gw.disable_builtins:
+        return ""
+    enabled = default_builtin_catalog().identifiers_excluding(gw.disable_builtins)
+    added = [ident for ident in module_identifiers.split(",") if ident]
+    enabled.extend(ident for ident in added if ident not in enabled)
+    return ",".join(enabled)
 
 
 def _is_module(entry: ModuleEntry | object) -> bool:

@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Disable built-in modules.** `disable_builtins` on a gateway (and
+  `init --disable-builtin <slug>`, repeatable, plus a wizard multi-select) turns
+  off shipped IA modules such as Vision or SFC. Because the gateway's
+  `GATEWAY_MODULES_ENABLED` env var is a strict whitelist (anything unlisted is
+  quarantined at boot), the generator inverts the blocklist into "enable every
+  other built-in plus any added modules", emitting the var only when something
+  is disabled so existing stacks are byte-unchanged. The full built-in set is
+  pinned in `builtin_modules.yaml` and re-verified against the live gateway image
+  by an opt-in smoke guard; `switch-profile` carries the disabled set across a
+  reshape.
+
 ## [0.2.0] - 2026-06-03
 
 ### Added

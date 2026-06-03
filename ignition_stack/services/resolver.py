@@ -111,6 +111,7 @@ def _expand_redundancy(config: ProjectConfig) -> None:
                 memory_mb=master.memory_mb,
                 http_port=next_port,
                 modules=list(master.modules),
+                disable_builtins=list(master.disable_builtins),
                 redundancy=RedundancyConfig(
                     mode="backup",
                     peer=master.name,

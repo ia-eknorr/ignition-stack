@@ -50,6 +50,7 @@ ignition-stack init [OPTIONS] NAME
 - `--force` (flag): Bypass the hub-and-spoke red-tier RAM advisory.
 - `--edge-role` `TEXT`: Gateway role that runs the Ignition Edge edition. Scaleout runs all gateways standard by default; hub-and-spoke defaults its spokes to Edge. Pass 'none' to disable the profile's edge default; pass a role name ('frontend', 'hub', 'gateway', ...) to opt that specific role in.
 - `--redundant` `TEXT`: Make a single gateway role redundant, expanding it into a master + backup pair (e.g. 'backend' for scaleout, 'hub' for hub-and-spoke, 'gateway' for standalone). Frontends and spokes are replicated, not paired, and are rejected.
+- `--disable-builtin` `TEXT` (default `[]`): Built-in IA module to turn off on every gateway (repeatable), e.g. --disable-builtin vision --disable-builtin sfc. Emits a GATEWAY_MODULES_ENABLED whitelist of everything else. Slugs tab-complete; an unknown slug is rejected with the full valid list.
 - `--from-file`, `-f` `PATH`: Build from a saved config file (YAML or JSON, as dumped by --dry-run) instead of a profile or the wizard. Mutually exclusive with --profile. The project name argument overrides the file's name.
 - `--dry-run` (flag): Resolve the config and print it (see --output-format) without writing any files. The dump is the full build input; redirect it to a file, edit it, and rebuild with --from-file.
 - `--output-format` `TEXT`: Format for the --dry-run dump: 'yaml' (default) or 'json'.

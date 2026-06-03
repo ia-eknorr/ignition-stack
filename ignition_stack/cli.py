@@ -22,6 +22,7 @@ from rich.console import Console
 from ignition_stack import __version__
 from ignition_stack.commands.modules import modules_app
 from ignition_stack.completion import (
+    complete_disable_builtin,
     complete_edge_role,
     complete_output_format,
     complete_profile,
@@ -172,6 +173,17 @@ def init(
         ),
         autocompletion=complete_redundant_role,
     ),
+    disable_builtin: list[str] = typer.Option(  # noqa: B008 - Typer pattern
+        [],
+        "--disable-builtin",
+        help=(
+            "Built-in IA module to turn off on every gateway (repeatable), e.g. "
+            "--disable-builtin vision --disable-builtin sfc. Emits a "
+            "GATEWAY_MODULES_ENABLED whitelist of everything else. Slugs "
+            "tab-complete; an unknown slug is rejected with the full valid list."
+        ),
+        autocompletion=complete_disable_builtin,
+    ),
     from_file: Path | None = typer.Option(  # noqa: B008 - Typer pattern
         None,
         "--from-file",
@@ -240,6 +252,7 @@ def init(
             reverse_proxy=reverse_proxy,
             proxy_path=proxy_path,
             redundant=redundant,
+            disable_builtin=disable_builtin,
         )
 
     if dry_run:
@@ -328,6 +341,7 @@ def _build_from_profile(
     reverse_proxy: str | None,
     proxy_path: str,
     redundant: str | None,
+    disable_builtin: list[str],
 ) -> ProjectConfig:
     """Materialize a config from the named profile + CLI flags, or exit cleanly."""
     try:
@@ -345,6 +359,7 @@ def _build_from_profile(
         network_split=network_split,
         reverse_proxy=proxy,
         redundant_role=redundant,
+        disable_builtins=tuple(disable_builtin),
     )
     try:
         config = build_profile(profile, name, options)
@@ -463,7 +478,9 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
     'none' to keep the new profile from re-introducing its edge default); the
     spoke count from the number of spoke-role gateways, the frontend count from
     the number of frontend-role gateways, and the network split is carried over
-    verbatim so a reshape preserves the user's topology choice.
+    verbatim so a reshape preserves the user's topology choice. Disabled
+    built-in modules are carried over too (see below) so a reshape doesn't
+    silently re-enable Vision/SFC/etc.
     """
     edge_roles = [gw.role or gw.name for gw in config.gateways if gw.ignition_edition == "edge"]
     spoke_count = sum(1 for gw in config.gateways if (gw.role or "") == "spoke")
@@ -479,6 +496,12 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
         ),
         None,
     )
+    # Disabled built-ins are applied stack-wide, so carry over the slugs disabled
+    # on EVERY gateway (the intersection) - that is the stack-wide intent, and it
+    # won't over-disable a module that a hand-authored config turned off on only
+    # one node. The target profile re-applies it uniformly.
+    disabled_sets = [set(gw.disable_builtins) for gw in config.gateways]
+    disable_builtins = tuple(sorted(set.intersection(*disabled_sets))) if disabled_sets else ()
     return ProfileOptions(
         spokes=spoke_count or 3,
         frontends=frontend_count or 1,
@@ -488,6 +511,7 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
         database_kind=config.database.kind if config.database else None,
         services=tuple(config.services),
         redundant_role=redundant_role,
+        disable_builtins=disable_builtins,
     )
 
 

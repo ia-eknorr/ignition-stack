@@ -191,9 +191,7 @@ def test_keycloak_with_mongo_only_is_a_conflict() -> None:
     """Mongo can't satisfy Keycloak's sql-database need and we allow only one DB."""
     with pytest.raises(ResolveError, match="needs a different database"):
         resolve(
-            ProjectConfig(
-                name="kc", database=DatabaseConfig(kind="mongo"), services=["keycloak"]
-            )
+            ProjectConfig(name="kc", database=DatabaseConfig(kind="mongo"), services=["keycloak"])
         )
 
 
@@ -255,8 +253,17 @@ def test_gateway_resources_overlay_every_gateway(tmp_path: Path) -> None:
     write_project(config, tmp_path / "multi")
     for gw in ("frontend", "backend"):
         conn = (
-            tmp_path / "multi" / "services" / gw / "config" / "resources" / "core" / "ignition"
-            / "database-connection" / "db" / "config.json"
+            tmp_path
+            / "multi"
+            / "services"
+            / gw
+            / "config"
+            / "resources"
+            / "core"
+            / "ignition"
+            / "database-connection"
+            / "db"
+            / "config.json"
         )
         assert conn.is_file(), f"db-connection missing on gateway '{gw}'"
 
@@ -268,9 +275,10 @@ def test_gateway_resources_overlay_every_gateway(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("svc", NON_DB_SERVICES)
 def test_service_golden(svc: str) -> None:
-    _check_or_update_golden(f"services/{svc}/docker-compose.yaml", _render(
-        ProjectConfig(name=svc, database=None, services=[svc])
-    ))
+    _check_or_update_golden(
+        f"services/{svc}/docker-compose.yaml",
+        _render(ProjectConfig(name=svc, database=None, services=[svc])),
+    )
 
 
 @pytest.mark.parametrize("kind", DB_KINDS)

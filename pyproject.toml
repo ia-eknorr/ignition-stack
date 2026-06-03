@@ -54,9 +54,10 @@ packages = ["ignition_stack"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "modules.yaml" = "ignition_stack/modules.yaml"
+"builtin_modules.yaml" = "ignition_stack/builtin_modules.yaml"
 
 [tool.hatch.build.targets.sdist]
-include = ["ignition_stack", "tests", "README.md", "pyproject.toml", "modules.yaml"]
+include = ["ignition_stack", "tests", "README.md", "pyproject.toml", "modules.yaml", "builtin_modules.yaml"]
 
 [tool.ruff]
 line-length = 100

@@ -88,9 +88,7 @@ def _options(command: object) -> list[object]:
     return [
         p
         for p in command.params  # type: ignore[attr-defined]
-        if p.param_type_name == "option"
-        and not getattr(p, "hidden", False)
-        and p.name != "help"
+        if p.param_type_name == "option" and not getattr(p, "hidden", False) and p.name != "help"
     ]
 
 

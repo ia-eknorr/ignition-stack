@@ -124,8 +124,22 @@ class GatewayConfig(BaseModel):
             "Module catalog entry names (slugs) to attach to this gateway. "
             "The compose engine wires each cached .modl into the gateway "
             "volume AND enumerates it in ACCEPT_MODULE_LICENSES + "
-            "ACCEPT_MODULE_CERTS per the resolved q-module-install finding "
-            "(GATEWAY_MODULES_ENABLED is omitted - it quarantines built-ins)."
+            "ACCEPT_MODULE_CERTS per the resolved q-module-install finding. "
+            "These added identifiers are also folded into the "
+            "GATEWAY_MODULES_ENABLED whitelist when disable_builtins is set, "
+            "so disabling a built-in never quarantines an added module."
+        ),
+    )
+    disable_builtins: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Slugs of built-in IA modules to turn off on this gateway, e.g. "
+            "['vision', 'sfc']. Because the gateway's GATEWAY_MODULES_ENABLED "
+            "env var is a strict whitelist (anything unlisted is quarantined), "
+            "the engine inverts this into 'enable every built-in except these, "
+            "plus any added modules'. Empty (default) emits no whitelist and "
+            "leaves all built-ins on - the historical behavior. Slugs are "
+            "validated against builtin_modules.yaml; an unknown slug raises."
         ),
     )
     redundancy: RedundancyConfig | None = Field(
@@ -153,6 +167,19 @@ class GatewayConfig(BaseModel):
     def _validate_edition(cls, v: str) -> str:
         if v not in {"standard", "edge"}:
             raise ValueError("ignition_edition must be 'standard' or 'edge'")
+        return v
+
+    @field_validator("disable_builtins")
+    @classmethod
+    def _validate_disable_builtins(cls, v: list[str]) -> list[str]:
+        # Reject unknown slugs loudly: a typo here would otherwise be a silent
+        # no-op (the slug isn't in the catalog, so nothing gets disabled),
+        # which is exactly the surprise the whitelist inversion must avoid.
+        # Imported locally to keep the config schema free of a load-time catalog
+        # dependency (and dodge any import-order coupling).
+        from ignition_stack.catalog.builtins import validate_disable_slugs
+
+        validate_disable_slugs(v)
         return v
 
     @property

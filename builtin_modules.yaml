@@ -1,0 +1,122 @@
+# Catalog of the built-in IA modules that ship inside the Ignition gateway
+# image. Used to translate a gateway's `disable_builtins` slugs into the
+# GATEWAY_MODULES_ENABLED whitelist the engine emits (enabled = all built-ins
+# minus the disabled ones, plus any third-party module identifiers).
+#
+# Why this file exists:
+#   GATEWAY_MODULES_ENABLED is a strict WHITELIST, not a blocklist - anything
+#   not listed is quarantined at boot (verified live on 8.3.6). So "disable
+#   Vision" can only be expressed as "enable every built-in except Vision".
+#   That inversion needs the COMPLETE built-in set; an incomplete list would
+#   silently quarantine the modules we forgot to enumerate. This file is that
+#   complete set, and tests/test_builtin_catalog.py (marked `smoke`) re-derives
+#   it from the live image so a stale list fails CI loudly instead of dropping
+#   modules silently.
+#
+# Provenance (how to regenerate when bumping the Ignition image):
+#   1. Boot the pinned image with no whitelist so every built-in loads:
+#        docker run --rm -e ACCEPT_IGNITION_EULA=Y -e GATEWAY_ADMIN_PASSWORD=x \
+#          inductiveautomation/ignition:<tag>
+#   2. Read the loaded set from the gateway log lines:
+#        Starting up module '<identifier>' ... module-name=<name>
+#   3. Update `ignition_version` and the `modules` list below to match.
+#   The smoke guard test automates this comparison.
+#
+# `identifier` is the fully-qualified module id used verbatim in
+# GATEWAY_MODULES_ENABLED. `slug` is the friendly kebab name a user puts in
+# `disable_builtins`. `name` is the gateway's display name (for wizard labels).
+
+version: 1
+
+# The exact Ignition image tag this built-in set was captured from. The guard
+# test only asserts a match when the running image reports this version.
+ignition_version: "8.3.6"
+
+modules:
+  - slug: alarm-notification
+    identifier: com.inductiveautomation.alarm-notification
+    name: Alarm Notification
+  - slug: allen-bradley-driver
+    identifier: com.inductiveautomation.opcua.drivers.ablegacy
+    name: Allen-Bradley Driver
+  - slug: bacnet-driver
+    identifier: com.inductiveautomation.opcua.drivers.bacnet
+    name: BACnet Driver
+  - slug: enterprise-administration
+    identifier: com.inductiveautomation.eam
+    name: Enterprise Administration
+  - slug: event-streams
+    identifier: com.inductiveautomation.eventstream
+    name: Event Streams
+  - slug: historian-core
+    identifier: com.inductiveautomation.historian
+    name: Historian Core
+  - slug: kafka-connector
+    identifier: com.inductiveautomation.connectors.kafka
+    name: Kafka Connector
+  - slug: legacy-dnp3-driver
+    identifier: com.inductiveautomation.opcua.drivers.dnp3
+    name: Legacy DNP3 Driver
+  - slug: logix-driver
+    identifier: com.inductiveautomation.opcua.drivers.logix
+    name: Logix Driver
+  - slug: mariadb-jdbc-driver
+    identifier: com.inductiveautomation.jdbc.mariadb
+    name: MariaDB JDBC Driver
+  - slug: micro800-driver
+    identifier: com.inductiveautomation.opcua.drivers.micro800
+    name: Micro800 Driver
+  - slug: mitsubishi-driver
+    identifier: com.inductiveautomation.opcua.drivers.mitsubishi
+    name: Mitsubishi Driver
+  - slug: modbus-driver
+    identifier: com.inductiveautomation.opcua.drivers.modbus
+    name: Modbus Driver
+  - slug: mssql-jdbc-driver
+    identifier: com.inductiveautomation.jdbc.mssql
+    name: MSSQL JDBC Driver
+  - slug: omron-driver
+    identifier: com.inductiveautomation.opcua.drivers.omron
+    name: Omron Driver
+  - slug: opc-ua
+    identifier: com.inductiveautomation.opcua
+    name: OPC-UA
+  - slug: perspective
+    identifier: com.inductiveautomation.perspective
+    name: Perspective
+  - slug: postgresql-jdbc-driver
+    identifier: com.inductiveautomation.jdbc.postgresql
+    name: PostgreSQL JDBC Driver
+  - slug: reporting
+    identifier: com.inductiveautomation.reporting
+    name: Reporting
+  - slug: sfc
+    identifier: com.inductiveautomation.sfc
+    name: SFC
+  - slug: siemens-drivers
+    identifier: com.inductiveautomation.opcua.drivers.siemens
+    name: Siemens Drivers
+  - slug: siemens-enhanced-driver
+    identifier: com.inductiveautomation.opcua.drivers.siemens-symbolic
+    name: Siemens Enhanced Driver
+  - slug: sms-notification
+    identifier: com.inductiveautomation.sms-notification
+    name: SMS Notification
+  - slug: sql-bridge
+    identifier: com.inductiveautomation.sqlbridge
+    name: SQL Bridge
+  - slug: sql-historian
+    identifier: com.inductiveautomation.historian.sql
+    name: SQL Historian
+  - slug: symbol-factory
+    identifier: com.inductiveautomation.symbol-factory
+    name: Symbol Factory
+  - slug: udp-and-tcp-drivers
+    identifier: com.inductiveautomation.opcua.drivers.tcpudp
+    name: UDP and TCP Drivers
+  - slug: vision
+    identifier: com.inductiveautomation.vision
+    name: Vision
+  - slug: webdev
+    identifier: com.inductiveautomation.webdev
+    name: WebDev
