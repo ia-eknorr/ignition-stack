@@ -1,5 +1,4 @@
 #!/bin/bash
-# Vendored from ignition-stack Phase 1 (scripts/seeding-poc/baseline/bootstrap.sh).
 #
 # This script runs once per gateway data volume. It:
 #   1. Copies the base /usr/local/bin/ignition/data into the persistent

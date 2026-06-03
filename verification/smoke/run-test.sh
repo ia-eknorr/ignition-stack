@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# End-to-end verification harness for ignition-stack phases 1-3.
+# End-to-end verification harness for ignition-stack.
 #
-# Drives the CLI through every behaviour the three merged-or-pending phases
-# claim to deliver and writes a per-check PASS/FAIL line to results.log.
+# Drives the CLI through the full generate -> boot -> commission flow
+# and writes a per-check PASS/FAIL line to results.log.
 # Exits non-zero on any failure.
 #
 # Re-run safely: cleans containers and named volume on every invocation,
@@ -43,7 +43,7 @@ cleanup() {
 trap cleanup EXIT
 
 : > "${LOG}"
-log "ignition-stack phase 1-3 verification"
+log "ignition-stack end-to-end verification"
 log "repo:    ${REPO_ROOT}"
 log "branch:  $(git -C "${REPO_ROOT}" branch --show-current)"
 log "commit:  $(git -C "${REPO_ROOT}" rev-parse --short HEAD)"
@@ -104,7 +104,7 @@ fi
 
 ############################################################
 log ""
-log "--- 3. phase 3: catalog (modules subcommand) ---"
+log "--- 3. catalog (modules subcommand) ---"
 ############################################################
 
 LIST_OUT="${HERE}/.tmp.list.out"
@@ -187,7 +187,7 @@ rm -f "${DL_OUT}"
 
 ############################################################
 log ""
-log "--- 4. phase 2: init generates a project ---"
+log "--- 4. init generates a project ---"
 ############################################################
 
 rm -rf "${PROJECT_DIR}"
@@ -223,7 +223,7 @@ fi
 
 ############################################################
 log ""
-log "--- 5. phase 1+2: docker compose up & gateway reaches RUNNING ---"
+log "--- 5. docker compose up & gateway reaches RUNNING ---"
 ############################################################
 
 (

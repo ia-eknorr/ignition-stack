@@ -30,8 +30,3 @@ Thumbs.db
 .env
 .env.local
 *.env
-
-# Phase-1 POC artifacts (transient container outputs)
-scripts/seeding-poc/runs/
-scripts/seeding-poc/.modl-cache/
-# Screenshots ARE committed - they're the matrix's evidence.
