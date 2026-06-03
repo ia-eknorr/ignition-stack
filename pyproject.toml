@@ -38,11 +38,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-poc = [
-  # Phase 1 only: tools for the seedability-investigation harness.
-  "playwright>=1.49",
-  "httpx>=0.27",
-]
 dev = [
   "pytest>=8.3",
   "ruff>=0.7",
