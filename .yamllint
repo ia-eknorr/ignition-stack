@@ -1,0 +1,17 @@
+---
+# yamllint runs only via the local pre-commit hook (CI does not gate on it).
+# These relaxations match the repo's conventions so the hook stays useful
+# without nagging about house-style choices.
+extends: default
+
+rules:
+  # Long lines are fine here: data tables, URLs, and env strings read worse
+  # wrapped. Keep a generous soft cap as a non-blocking nudge.
+  line-length:
+    max: 120
+    level: warning
+  # House style omits the leading `---` document-start marker.
+  document-start: disable
+  # GitHub Actions reserves keys like `on:`; don't flag them as truthy values.
+  truthy:
+    check-keys: false
