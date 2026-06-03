@@ -111,9 +111,15 @@ def _parse(text: str, path: Path) -> object:
 
 
 def _format_validation_error(exc: ValidationError) -> str:
-    """Render a pydantic ValidationError as a compact, readable bullet list."""
+    """Render a pydantic ValidationError as a compact, readable bullet list.
+
+    pydantic prefixes messages from a validator's ``ValueError`` with
+    ``Value error, ``; strip it so a schema's own message (e.g. "unsupported
+    database kind ...") reads cleanly instead of leaking the wrapper.
+    """
     lines: list[str] = []
     for err in exc.errors():
         loc = ".".join(str(p) for p in err["loc"]) or "(root)"
-        lines.append(f"  - {loc}: {err['msg']}")
+        msg = err["msg"].removeprefix("Value error, ")
+        lines.append(f"  - {loc}: {msg}")
     return "\n".join(lines)
