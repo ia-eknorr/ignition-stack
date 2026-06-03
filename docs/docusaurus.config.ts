@@ -9,6 +9,7 @@ const config: Config = {
   title: "ignition-stack",
   tagline:
     "Generate ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos and SE engagements.",
+  favicon: "img/favicon.ico",
   url: "https://ia-eknorr.github.io",
   baseUrl: "/ignition-stack/",
 
@@ -89,6 +90,8 @@ const config: Config = {
   ],
 
   themeConfig: {
+    // Social-card / og:image shown when a docs link is shared.
+    image: "img/logo.png",
     // Follow the visitor's OS theme on first load instead of forcing light mode.
     colorMode: {
       respectPrefersColorScheme: true,
@@ -99,6 +102,10 @@ const config: Config = {
     },
     navbar: {
       title: "ignition-stack",
+      logo: {
+        alt: "ignition-stack logo",
+        src: "img/logo.svg",
+      },
       items: [
         { type: "docSidebar", sidebarId: "docs", position: "left", label: "Docs" },
         {
