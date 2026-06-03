@@ -23,6 +23,16 @@ Confirm it is on your path:
 ignition-stack --version
 ```
 
+## Shell completion
+
+Enable tab-completion for your shell once, then reload it:
+
+```sh
+ignition-stack --install-completion
+```
+
+This completes command names, subcommands, and option flags in bash, zsh, fish, and PowerShell. It also completes dynamic values where the choice is a known set: profile names for `init --profile` and `switch-profile`, the `--edge-role` values, and catalog entry names for `modules download`. To print the completion script without installing it (to inspect or manage it yourself), use `ignition-stack --show-completion`.
+
 ## Prerequisites
 
 - **Docker** with the Compose plugin. The CLI only generates files; Docker is what runs the stacks it writes. Any recent Docker Engine or Docker Desktop with `docker compose` works.

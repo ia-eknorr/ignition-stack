@@ -23,6 +23,7 @@ from ignition_stack.catalog.verify import (
     VerifyIssue,
     verify_reachable,
 )
+from ignition_stack.completion import complete_module_name
 
 modules_app = typer.Typer(help="Inspect and prepare the module + driver catalog.")
 console = Console()
@@ -108,7 +109,10 @@ def validate(
 def download(
     names: Annotated[
         list[str] | None,
-        typer.Argument(help="Entries to download. Omit to download every non-manual entry."),
+        typer.Argument(
+            help="Entries to download. Omit to download every non-manual entry.",
+            autocompletion=complete_module_name,
+        ),
     ] = None,
     catalog_path: CatalogOpt = None,
     ignition_version: IgnVerOpt = None,

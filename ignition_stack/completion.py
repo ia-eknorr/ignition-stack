@@ -1,0 +1,46 @@
+"""Shell-completion callbacks for dynamic CLI values.
+
+Typer re-invokes the program on every ``<TAB>``, so these callbacks must be
+cheap and must never raise - an exception here would surface as noise on the
+user's shell line. They read only the in-memory profile registry and the
+local bundled ``modules.yaml``; they never touch the network.
+
+Each callback takes the partial value the user has typed and returns the
+matching candidates. Returning ``(value, help)`` tuples gives the richer
+two-column completion menu that zsh and fish render.
+"""
+
+from __future__ import annotations
+
+from ignition_stack.profiles import list_profiles
+
+
+def complete_profile(incomplete: str) -> list[tuple[str, str]]:
+    """Profile slugs (with their one-line summary) matching the typed prefix."""
+    return [(p.slug, p.summary) for p in list_profiles() if p.slug.startswith(incomplete)]
+
+
+# The Ignition Edge role names the profiles recognise. These are the string
+# literals the profile builders match ``edge_role`` against (see
+# profiles/*.py); duplicated here as the completion vocabulary because there
+# is no single registry of role names. 'none' is the sentinel that disables a
+# profile's default Edge role.
+EDGE_ROLE_VALUES = ("frontend", "backend", "hub", "spoke", "gateway", "standalone", "none")
+
+
+def complete_edge_role(incomplete: str) -> list[str]:
+    """Edge role names matching the typed prefix."""
+    return [role for role in EDGE_ROLE_VALUES if role.startswith(incomplete)]
+
+
+def complete_module_name(incomplete: str) -> list[str]:
+    """Catalog entry slugs from the bundled catalog matching the typed prefix."""
+    try:
+        from ignition_stack.catalog.loader import load_catalog
+
+        entries = load_catalog(None).entries
+    except Exception:
+        # Completion runs on every keystroke-with-TAB; a missing or malformed
+        # catalog must degrade to "no suggestions", never break the shell line.
+        return []
+    return [entry.name for entry in entries if entry.name.startswith(incomplete)]

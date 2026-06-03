@@ -20,6 +20,7 @@ from rich.console import Console
 
 from ignition_stack import __version__
 from ignition_stack.commands.modules import modules_app
+from ignition_stack.completion import complete_edge_role, complete_profile
 from ignition_stack.compose import write_project
 from ignition_stack.config import ProjectConfig
 from ignition_stack.lifecycle import (
@@ -44,7 +45,6 @@ from ignition_stack.wizard import run_wizard
 app = typer.Typer(
     name="ignition-stack",
     help="Generate ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos.",
-    add_completion=False,
     rich_markup_mode="rich",
 )
 app.add_typer(modules_app, name="modules")
@@ -94,6 +94,7 @@ def init(
         "--profile",
         "-p",
         help=_profile_help(),
+        autocompletion=complete_profile,
     ),
     spokes: int = typer.Option(
         3,
@@ -115,6 +116,7 @@ def init(
             "to disable the profile's edge default; pass a role name ('hub', "
             "'gateway', ...) to opt that specific role in."
         ),
+        autocompletion=complete_edge_role,
     ),
     keep_cli: bool = typer.Option(
         False,
@@ -241,7 +243,11 @@ def reset(
 
 @app.command(name="switch-profile")
 def switch_profile(
-    profile: str = typer.Argument(..., help="Architecture profile to switch this stack to."),
+    profile: str = typer.Argument(
+        ...,
+        help="Architecture profile to switch this stack to.",
+        autocompletion=complete_profile,
+    ),
     project_dir: Path = typer.Option(  # noqa: B008 - Typer pattern
         Path("."),
         "--project-dir",

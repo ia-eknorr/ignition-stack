@@ -19,6 +19,8 @@ Generate ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos.
 **Options**
 
 - `--version` (flag): Show ignition-stack version and exit.
+- `--install-completion` (flag): Install completion for the current shell.
+- `--show-completion` (flag): Show completion for the current shell, to copy it or customize the installation.
 
 ## `ignition-stack init`
 
