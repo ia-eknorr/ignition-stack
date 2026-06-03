@@ -1,4 +1,4 @@
-"""Lifecycle primitives: SE-demo record, scoped cleanup, in-place regeneration.
+"""Lifecycle primitives: configuration record, scoped cleanup, in-place regeneration.
 
 Only the light modules (``record``, ``cleanup``) are re-exported here; both
 depend on the config schema alone. ``regenerate`` pulls in the compose writer,

@@ -59,4 +59,4 @@ Both remove only this project's containers and volumes. See [Tear down a stack](
 
 - [Architecture profiles](../profiles/index.md) decide the shape of the stack.
 - [Services](../services/index.md) are the databases, brokers, and other containers you can add.
-- [Lifecycle modes](../concepts/lifecycle-modes.md) explain how to keep a stack for repeated reshaping with `--keep-cli`.
+- [The configuration record](../concepts/configuration-record.md) explains how every stack records itself for reset, reshape, and the declarative dump/build loop.

@@ -1,13 +1,13 @@
-"""Phase 7 acceptance tests for the two lifecycle modes + scoped cleanup.
+"""Acceptance tests for the lifecycle record, reset/reshape, and scoped cleanup.
 
-Three contracts, mapped to the phase's validation criteria:
+Every generated project records its resolved config under ``.ignition-stack/``;
+that record is the one primitive ``reset`` and ``switch-profile`` read back to
+regenerate or reshape in place. Three contracts:
 
-1. One-shot ``init`` (default) leaves a self-contained project with no CLI
-   primitives - ``.ignition-stack/`` is absent, so ``reset`` has nothing to
-   work from.
-2. SE-demo ``init --keep-cli`` records the resolved config under
-   ``.ignition-stack/``; ``reset`` regenerates from it and the record round-trips
-   byte-for-byte (config in == config out).
+1. ``init`` records the resolved config, and ``reset`` round-trips it
+   byte-for-byte (config in == config out) while clearing stale generated files.
+2. ``reset`` / ``switch-profile`` refuse a directory with no record (one that
+   this CLI never generated, or whose record was removed).
 3. ``wipe`` is provably scoped to this project: the generated ``Makefile`` and
    ``ignition-stack wipe`` both name the compose project on a ``down -v`` and
    never issue a global prune.
@@ -15,6 +15,7 @@ Three contracts, mapped to the phase's validation criteria:
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -37,42 +38,24 @@ def _init(runner: CliRunner, tmp_path: Path, *extra: str) -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# One-shot mode (default)                                                      #
+# Record + reset round-trip                                                    #
 # --------------------------------------------------------------------------- #
 
 
-def test_one_shot_leaves_no_lifecycle_primitives(runner: CliRunner, tmp_path: Path) -> None:
+def test_init_records_resolved_config(runner: CliRunner, tmp_path: Path) -> None:
     project = _init(runner, tmp_path)
-    assert not (project / LIFECYCLE_DIR).exists()
-    assert not has_record(project)
-    # ...but it is still a complete, runnable project.
+    assert has_record(project)
+    record = read_record(project)
+    assert record.name == "demo"
+    assert record.profile == "standalone"
+    # ...and it is a complete, runnable project alongside the record.
     assert (project / "docker-compose.yaml").is_file()
     assert (project / "Makefile").is_file()
     assert (project / "POST-SETUP.md").is_file()
 
 
-def test_reset_refuses_a_one_shot_project(runner: CliRunner, tmp_path: Path) -> None:
-    project = _init(runner, tmp_path)
-    result = runner.invoke(app, ["reset", "-C", str(project)])
-    assert result.exit_code == 2, result.stdout
-    assert "no lifecycle record" in result.stdout.lower()
-
-
-# --------------------------------------------------------------------------- #
-# SE-demo mode (--keep-cli) + reset round-trip                                 #
-# --------------------------------------------------------------------------- #
-
-
-def test_se_demo_persists_recorded_config(runner: CliRunner, tmp_path: Path) -> None:
-    project = _init(runner, tmp_path, "--keep-cli")
-    assert record_path(project).is_file()
-    record = read_record(project)
-    assert record.name == "demo"
-    assert record.profile == "standalone"
-
-
 def test_reset_round_trips_recorded_config(runner: CliRunner, tmp_path: Path) -> None:
-    project = _init(runner, tmp_path, "--keep-cli")
+    project = _init(runner, tmp_path)
     before = read_record(project).model_dump()
 
     result = runner.invoke(app, ["reset", "-C", str(project)])
@@ -80,13 +63,12 @@ def test_reset_round_trips_recorded_config(runner: CliRunner, tmp_path: Path) ->
 
     after = read_record(project).model_dump()
     assert after == before
-    # Regeneration reproduced the runnable tree.
     assert (project / "docker-compose.yaml").is_file()
     assert (project / "Makefile").is_file()
 
 
 def test_reset_keeps_record_but_clears_stale_files(runner: CliRunner, tmp_path: Path) -> None:
-    project = _init(runner, tmp_path, "--keep-cli")
+    project = _init(runner, tmp_path)
     stray = project / "leftover-from-a-previous-up.txt"
     stray.write_text("stale", encoding="utf-8")
 
@@ -97,11 +79,20 @@ def test_reset_keeps_record_but_clears_stale_files(runner: CliRunner, tmp_path: 
     assert not stray.exists()  # the generated tree was cleared first
 
 
+def test_reset_refuses_a_directory_without_a_record(runner: CliRunner, tmp_path: Path) -> None:
+    # A project whose record was removed (or a directory this CLI never made)
+    # has nothing to reset from.
+    project = _init(runner, tmp_path)
+    shutil.rmtree(project / LIFECYCLE_DIR)
+
+    result = runner.invoke(app, ["reset", "-C", str(project)])
+    assert result.exit_code == 2, result.stdout
+    assert "no lifecycle record" in result.stdout.lower()
+
+
 def test_switch_profile_reshapes_and_rerecords(runner: CliRunner, tmp_path: Path) -> None:
-    # Start from a 2-gateway scaleout SE-demo project.
-    result = runner.invoke(
-        app, ["init", "demo", "--profile", "scaleout", "--keep-cli", "-o", str(tmp_path)]
-    )
+    # Start from a 2-gateway scaleout project.
+    result = runner.invoke(app, ["init", "demo", "--profile", "scaleout", "-o", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     project = tmp_path / "demo"
     assert (project / "services" / "frontend").is_dir()
@@ -136,17 +127,18 @@ def test_generated_makefile_wipe_is_project_scoped(runner: CliRunner, tmp_path: 
 
 
 def test_wipe_dry_run_emits_scoped_command(runner: CliRunner, tmp_path: Path) -> None:
-    project = _init(runner, tmp_path, "--keep-cli")
+    project = _init(runner, tmp_path)
     result = runner.invoke(app, ["wipe", "-C", str(project), "--dry-run"])
     assert result.exit_code == 0, result.stdout
     assert "docker compose -p demo down -v --remove-orphans" in result.stdout
 
 
-def test_wipe_resolves_project_name_from_env_for_one_shot(
+def test_wipe_resolves_project_name_from_env_when_record_absent(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    # One-shot has no record, but .env carries COMPOSE_PROJECT_NAME for scoping.
+    # With the record removed, .env's COMPOSE_PROJECT_NAME still scopes the wipe.
     project = _init(runner, tmp_path)
+    shutil.rmtree(project / LIFECYCLE_DIR)
     result = runner.invoke(app, ["wipe", "-C", str(project), "--dry-run"])
     assert result.exit_code == 0, result.stdout
     assert "-p demo " in result.stdout

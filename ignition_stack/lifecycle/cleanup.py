@@ -43,8 +43,9 @@ def wipe_command(project_name: str) -> list[str]:
 def project_name(project_dir: Path) -> str:
     """Resolve the compose project name for a generated project.
 
-    Prefers the SE-demo record (authoritative), then ``COMPOSE_PROJECT_NAME``
-    from the generated ``.env`` so one-shot projects can still be wiped.
+    Prefers the lifecycle record (authoritative), then ``COMPOSE_PROJECT_NAME``
+    from the generated ``.env`` so a project whose record was removed can still
+    be wiped.
     """
     project_dir = Path(project_dir)
     if has_record(project_dir):

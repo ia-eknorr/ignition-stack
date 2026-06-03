@@ -41,7 +41,6 @@ def write_project(
     config: ProjectConfig,
     target_dir: Path,
     *,
-    keep_cli: bool = False,
     overwrite: bool = False,
 ) -> list[Path]:
     """Generate the project tree at ``target_dir``.
@@ -50,9 +49,10 @@ def write_project(
     :func:`ignition_stack.services.resolver.resolve`) so the compose output and
     the on-disk seeds agree on the same fully-expanded stack.
 
-    ``keep_cli`` turns on SE-demo mode: the resolved config is recorded under
-    ``.ignition-stack/`` so ``reset`` / ``switch-profile`` can regenerate the
-    project in place. The default (one-shot) leaves no such primitive behind.
+    Every project records its resolved config under ``.ignition-stack/`` so
+    ``reset`` / ``switch-profile`` can regenerate or reshape it in place; the
+    same artifact can be dumped with ``init --dry-run`` and rebuilt with
+    ``init -f``.
 
     ``overwrite`` lets ``reset`` / ``switch-profile`` write into a directory
     that still holds the preserved ``.ignition-stack/`` record; normal ``init``
@@ -88,9 +88,7 @@ def write_project(
     if dropin_file is not None:
         written.append(dropin_file)
     written.append(_write_post_setup(config, target_dir))
-
-    if keep_cli:
-        written.append(write_record(config, target_dir))
+    written.append(write_record(config, target_dir))
 
     return written
 
@@ -378,7 +376,7 @@ logs:  ## Follow logs for every service.
 wipe:  ## Remove ONLY this project's containers, networks, and volumes.
 \t$(COMPOSE) -p $(PROJECT) down -v --remove-orphans
 
-reset:  ## Regenerate this project from its recorded SE-demo config.
+reset:  ## Regenerate this project from its recorded config.
 \tignition-stack reset
 """
 

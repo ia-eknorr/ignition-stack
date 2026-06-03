@@ -17,7 +17,7 @@ const sidebars: SidebarsConfig = {
       items: [
         "concepts/how-generation-works",
         "concepts/seeding",
-        "concepts/lifecycle-modes",
+        "concepts/configuration-record",
       ],
     },
     {
@@ -81,7 +81,11 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Guides",
-      items: ["guides/reset-and-reshape", "guides/teardown"],
+      items: [
+        "guides/reset-and-reshape",
+        "guides/declarative-config",
+        "guides/teardown",
+      ],
     },
     {
       type: "category",

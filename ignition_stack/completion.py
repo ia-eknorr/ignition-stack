@@ -44,6 +44,16 @@ def complete_reverse_proxy(incomplete: str) -> list[str]:
     return [kind for kind in REVERSE_PROXY_VALUES if kind.startswith(incomplete)]
 
 
+# Serialization formats `init --dry-run --output-format` accepts. Mirrors the
+# `Format` literal in config/io.py; kept here as the completion vocabulary.
+OUTPUT_FORMAT_VALUES = ("yaml", "json")
+
+
+def complete_output_format(incomplete: str) -> list[str]:
+    """Config dump format names matching the typed prefix."""
+    return [fmt for fmt in OUTPUT_FORMAT_VALUES if fmt.startswith(incomplete)]
+
+
 def complete_module_name(incomplete: str) -> list[str]:
     """Catalog entry slugs from the bundled catalog matching the typed prefix."""
     try:
