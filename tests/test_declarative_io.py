@@ -142,6 +142,9 @@ def test_from_file_bad_enum_exits_with_readable_message(runner: CliRunner, tmp_p
     assert result.exit_code == 2, result.stdout
     assert "Traceback" not in result.stdout
     assert "unsupported database kind" in result.stdout
+    # pydantic's "Value error, " wrapper is stripped so the schema's own message
+    # reads cleanly.
+    assert "Value error" not in result.stdout
 
 
 def test_from_file_with_profile_is_mutually_exclusive(runner: CliRunner, tmp_path: Path) -> None:
