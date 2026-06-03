@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-06-03
+
+Relicensing release. No functional changes to the CLI or generated stacks.
+
+### Changed
+
+- License changed from Apache-2.0 to MIT, to match the sibling Ignition
+  projects. A new PyPI version is required because PyPI will not overwrite an
+  already-published release.
+- The package version is now single-sourced from `ignition_stack/__init__.py`
+  and read by `pyproject.toml` through `[tool.hatch.version]`, so the two can no
+  longer drift apart.
+
 ## [0.1.0] - 2026-06-03
 
 First public release. `ignition-stack` generates self-contained Docker Compose
@@ -48,4 +61,5 @@ RUNNING with no manual UI steps.
 - Releases publish to PyPI automatically through GitHub Actions using Trusted
   Publishing (OIDC), with no stored API token.
 
+[0.1.1]: https://github.com/ia-eknorr/ignition-stack/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ia-eknorr/ignition-stack/releases/tag/v0.1.0
