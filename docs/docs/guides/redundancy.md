@@ -21,6 +21,8 @@ The wizard asks the same question ("Make the _role_ gateway redundant?") for the
 
 Redundancy applies to a **single** gateway. Replicated tiers - scaleout frontends, hub-and-spoke spokes - scale out horizontally rather than failing over, so `--redundant frontend` and `--redundant spoke` are rejected. (Ignition has no active/active or N-way redundancy; it is master/backup only.)
 
+Because the paired role is profile-specific, redundancy does not always survive a [reshape](./reset-and-reshape.md): `switch-profile` drops it (with an advisory) when the target profile has no gateway to pair, rather than failing the reshape.
+
 ## What gets generated
 
 A role marked redundant resolves into two gateways. For `--redundant backend`:

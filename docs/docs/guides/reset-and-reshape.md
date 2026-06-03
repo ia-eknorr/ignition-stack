@@ -35,6 +35,8 @@ ignition-stack switch-profile scaleout -C ./demo
 
 It regenerates in place and re-records the result, so the reshaped project can be reset or switched again. A gateway dropped by the reshape is removed cleanly on the next `up` because the generated teardown uses `--remove-orphans`.
 
+Redundancy is the exception to "choices carry over". The [paired role](./redundancy.md) is profile-specific - standalone pairs `gateway`, scaleout pairs `backend`, hub-and-spoke pairs `hub` - so a reshape can only keep it when the target profile hosts a gateway with that same role. When it can't (for example a redundant `standalone` reshaped to `scaleout`, which has no `gateway`), `switch-profile` drops the redundancy, prints an advisory, and completes the reshape as a non-redundant stack rather than failing. Re-apply `--redundant` on a topology that has a pairable role to bring it back.
+
 A typical reshape loop:
 
 ```sh
