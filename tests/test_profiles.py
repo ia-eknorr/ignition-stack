@@ -169,15 +169,45 @@ def test_scaleout_emits_two_gateways_plus_database() -> None:
     assert config.database is not None and config.database.kind == "postgres"
 
 
-def test_scaleout_frontend_defaults_to_edge() -> None:
+def test_scaleout_defaults_all_standard() -> None:
+    """The default scaleout shape runs every gateway on the standard edition;
+    Edge is opt-in via --edge-role, not the default."""
     config = build_profile("scaleout", "demo", ProfileOptions())
-    editions = {g.name: g.ignition_edition for g in config.gateways}
-    assert editions == {"frontend": "edge", "backend": "standard"}
+    assert all(g.ignition_edition == "standard" for g in config.gateways)
 
 
 def test_scaleout_edge_role_none_keeps_everything_standard() -> None:
     config = build_profile("scaleout", "demo", ProfileOptions(edge_role="none"))
     assert all(g.ignition_edition == "standard" for g in config.gateways)
+
+
+def test_scaleout_edge_role_frontend_flips_only_frontends() -> None:
+    config = build_profile("scaleout", "demo", ProfileOptions(frontends=2, edge_role="frontend"))
+    editions = {g.name: g.ignition_edition for g in config.gateways}
+    assert editions == {"frontend-1": "edge", "frontend-2": "edge", "backend": "standard"}
+
+
+def test_scaleout_single_frontend_keeps_bare_name() -> None:
+    config = build_profile("scaleout", "demo", ProfileOptions())
+    assert [g.name for g in config.gateways] == ["frontend", "backend"]
+    assert [g.http_port for g in config.gateways] == [9088, 9089]
+
+
+def test_scaleout_multiple_frontends_are_numbered() -> None:
+    config = build_profile("scaleout", "demo", ProfileOptions(frontends=2))
+    assert [g.name for g in config.gateways] == ["frontend-1", "frontend-2", "backend"]
+    assert [g.role for g in config.gateways] == ["frontend", "frontend", "backend"]
+    assert [g.http_port for g in config.gateways] == [9088, 9089, 9090]
+
+
+def test_scaleout_network_split_can_be_forced_off() -> None:
+    config = build_profile("scaleout", "demo", ProfileOptions(network_split=False))
+    assert config.network_split is False
+
+
+def test_hub_and_spoke_network_split_can_be_forced_on() -> None:
+    config = build_profile("hub-and-spoke", "demo", ProfileOptions(spokes=2, network_split=True))
+    assert config.network_split is True
 
 
 def test_scaleout_golden_and_renders_valid_yaml() -> None:
@@ -214,6 +244,53 @@ def test_scaleout_via_cli_writes_project(tmp_path: Path) -> None:
     compose = (tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8")
     parsed = _parse(compose)
     assert {"frontend", "backend", "db"} <= set(parsed["services"])
+
+
+def test_scaleout_cli_two_frontends_no_split(tmp_path: Path) -> None:
+    """--frontends 2 --no-network-split writes two frontend services on a single
+    shared network (no frontend/backend split)."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "demo",
+            "--profile",
+            "scaleout",
+            "--frontends",
+            "2",
+            "--no-network-split",
+            "-o",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    parsed = _parse((tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8"))
+    assert {"frontend-1", "frontend-2", "backend", "db"} <= set(parsed["services"])
+    # network split off -> no named frontend/backend networks block.
+    assert "networks" not in parsed or not parsed["networks"]
+
+
+def test_scaleout_cli_reverse_proxy_traefik(tmp_path: Path) -> None:
+    """--reverse-proxy traefik scaffolds the proxy README at the default path."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "demo",
+            "--profile",
+            "scaleout",
+            "--reverse-proxy",
+            "traefik",
+            "-o",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    readme = tmp_path / "demo" / "reverse-proxy" / "README.md"
+    assert readme.is_file()
+    assert "ia-eknorr/traefik-reverse-proxy" in readme.read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -467,6 +544,7 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
             6,  # spokes (yellow tier)
             "postgres",  # database
             "spoke",  # edge_role
+            False,  # network split (off for hub-and-spoke)
             "external",  # proxy
             True,  # advisory confirm
             True,  # summary confirm
@@ -485,6 +563,7 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
             6,  # yellow tier
             "postgres",
             "spoke",
+            False,  # network split
             "external",
             False,  # decline advisory
             True,  # summary confirm
@@ -503,6 +582,7 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
             12,  # red tier
             "postgres",
             "spoke",
+            False,  # network split
             "external",
             True,  # acknowledge red
             True,  # summary confirm
@@ -521,6 +601,7 @@ def test_wizard_red_tier_declined_falls_back() -> None:
             12,
             "postgres",
             "spoke",
+            False,  # network split
             "external",
             False,  # decline red
             True,  # summary confirm
@@ -530,6 +611,45 @@ def test_wizard_red_tier_declined_falls_back() -> None:
     assert outcome.confirmed
     # Rolled back to 4 spokes.
     assert len(outcome.config.gateways) == 5
+
+
+def test_wizard_scaleout_frontends_and_network_split() -> None:
+    """Scaleout wizard: frontend count + network-split confirm flow through to
+    the resolved config."""
+    prompter = ScriptedPrompter(
+        [
+            "scaleout",  # profile
+            2,  # frontend count
+            "postgres",  # database
+            "none",  # edge_role
+            True,  # network split
+            "external",  # reverse proxy
+            True,  # summary confirm
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed
+    # 2 frontends + 1 backend.
+    assert len(outcome.config.gateways) == 3
+    assert [g.name for g in outcome.config.gateways] == ["frontend-1", "frontend-2", "backend"]
+    assert outcome.config.network_split is True
+
+
+def test_wizard_scaleout_network_split_declined() -> None:
+    prompter = ScriptedPrompter(
+        [
+            "scaleout",
+            1,  # single frontend
+            "postgres",
+            "none",
+            False,  # network split off
+            "external",
+            True,
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed
+    assert outcome.config.network_split is False
 
 
 def test_wizard_summary_decline_marks_unconfirmed() -> None:

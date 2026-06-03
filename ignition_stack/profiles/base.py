@@ -44,8 +44,24 @@ class ProfileOptions:
     spokes: int = 3
     """Hub-and-spoke spoke count. Ignored by other profiles."""
 
+    frontends: int = 1
+    """Scaleout frontend gateway count. Ignored by other profiles.
+
+    1 yields a single gateway named ``frontend``; N>1 yields
+    ``frontend-1``..``frontend-N``. A ``backend`` gateway is always added
+    on top.
+    """
+
     force: bool = False
     """Bypass the hub-and-spoke red-tier advisory. Ignored elsewhere."""
+
+    network_split: bool | None = None
+    """Tri-state override for the frontend/backend network split.
+
+    ``None`` lets each profile apply its own default (scaleout splits,
+    hub-and-spoke does not). ``True``/``False`` force the split on or off
+    regardless of the profile default.
+    """
 
     edge_role: str | None = None
     """Which gateway role (if any) runs the Edge edition.

@@ -14,13 +14,16 @@ recaps the resolved choices and a single confirm gates the write.
 Step order:
 
 1. **Profile** - which of the four canned shapes the user wants.
-2. **Profile-specific** - spoke count for hub-and-spoke (skipped elsewhere).
+2. **Profile-specific count** - spoke count for hub-and-spoke, frontend
+   count for scaleout (skipped for single-gateway profiles).
 3. **Database** - SQL flavor for the stack, or "none".
 4. **Edition per role** - which role (if any) runs Edge. The default is
-   profile-driven: scaleout proposes "frontend", hub-and-spoke proposes
-   "spoke (all spokes)", standalone and mcp-n8n propose "none".
-5. **Reverse proxy** - existing/install-Traefik/skip.
-6. **Summary + confirm**.
+   profile-driven: all profiles now propose "none" (all standard).
+5. **Network split** - for the multi-gateway profiles (scaleout +
+   hub-and-spoke), whether to split frontend/backend onto separate
+   networks. Defaults on for scaleout, off for hub-and-spoke.
+6. **Reverse proxy** - existing/install-Traefik/skip.
+7. **Summary + confirm**.
 
 Per-gateway env-var overrides (``memory_mb`` etc.) are deferred to Phase 7
 when the lifecycle/reset commands need them; the gateway model already
@@ -54,9 +57,20 @@ _DB_CHOICES: list[tuple[str, str]] = [
 # default selection in the edition prompt; the user can override.
 _DEFAULT_EDGE_ROLE: dict[str, str] = {
     "standalone": "none",
-    "scaleout": "frontend",
+    "scaleout": "none",
     "hub-and-spoke": "spoke",
     "mcp-n8n": "none",
+}
+
+# Profiles that produce more than one gateway, so the frontend/backend
+# network split is a meaningful choice. Single-gateway profiles skip it.
+_MULTI_GATEWAY_PROFILES = frozenset({"scaleout", "hub-and-spoke"})
+
+# Default network-split proposal per multi-gateway profile. Scaleout splits
+# (the point of the demo); hub-and-spoke stays on one shared network.
+_DEFAULT_NETWORK_SPLIT: dict[str, bool] = {
+    "scaleout": True,
+    "hub-and-spoke": False,
 }
 
 
@@ -131,14 +145,18 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     """
     profile_slug = _ask_profile(prompter)
     spokes = _ask_spokes(prompter) if profile_slug == "hub-and-spoke" else 3
+    frontends = _ask_frontends(prompter) if profile_slug == "scaleout" else 1
     db_kind = _ask_database(prompter)
     edge_role = _ask_edge_role(prompter, profile_slug)
+    network_split = _ask_network_split(prompter, profile_slug)
     reverse_proxy = _ask_reverse_proxy(prompter)
 
     options = ProfileOptions(
         spokes=spokes,
+        frontends=frontends,
         force=False,  # the wizard prompts on yellow/red instead of using --force.
         edge_role=edge_role,
+        network_split=network_split,
         reverse_proxy=reverse_proxy,
         database_kind=db_kind,
     )
@@ -188,6 +206,24 @@ def _ask_spokes(prompter: Prompter) -> int:
     return prompter.integer("Spoke gateway count?", default=3, minimum=0)
 
 
+def _ask_frontends(prompter: Prompter) -> int:
+    return prompter.integer("Frontend gateway count?", default=1, minimum=1)
+
+
+def _ask_network_split(prompter: Prompter, profile_slug: str) -> bool | None:
+    """Whether to split frontend/backend onto separate networks.
+
+    Only meaningful for multi-gateway profiles; single-gateway profiles
+    return ``None`` (no prompt) and let the profile keep its default.
+    """
+    if profile_slug not in _MULTI_GATEWAY_PROFILES:
+        return None
+    default = _DEFAULT_NETWORK_SPLIT.get(profile_slug, False)
+    return prompter.confirm(
+        "Split frontend/backend onto separate Docker networks?", default=default
+    )
+
+
 def _ask_database(prompter: Prompter) -> str | None:
     raw = prompter.select("Database?", _DB_CHOICES, default="postgres")
     return None if raw == "none" else raw
@@ -207,7 +243,7 @@ def _edition_choices_for(profile_slug: str) -> list[tuple[str, str]]:
     if profile_slug == "scaleout":
         return [
             ("none", "All gateways run standard"),
-            ("frontend", "Frontend runs Edge (recommended for scaleout)"),
+            ("frontend", "Frontends run Edge"),
             ("backend", "Backend runs Edge"),
         ]
     if profile_slug == "hub-and-spoke":

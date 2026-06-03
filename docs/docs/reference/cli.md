@@ -41,8 +41,12 @@ ignition-stack init [OPTIONS] NAME
 
 - `--profile`, `-p` `TEXT`: Architecture profile to materialize (skips the wizard): - hub-and-spoke: Central hub gateway + N Edge spoke gateways. Spoke count > 8 needs --force. - mcp-n8n: One Ignition gateway + n8n + manual MCP (EA) module drop-in. - scaleout: Frontend + backend Ignition gateways via gateway network + Postgres. - standalone: One full Ignition 8.3 gateway + Postgres. The default starter stack.
 - `--spokes` `INTEGER` (default `3`): Spoke gateway count for the hub-and-spoke profile (ignored otherwise).
+- `--frontends` `INTEGER` (default `1`): Frontend gateway count for the scaleout profile (ignored otherwise).
+- `--network-split`, `--no-network-split` (flag): Force the frontend/backend network split on or off. Default follows the profile (scaleout splits, hub-and-spoke does not).
+- `--reverse-proxy` `TEXT`: Scaffold a reverse proxy of the given kind ('traefik'). Lays down a README + POST-SETUP entry at --proxy-path. Omit for plain host-port mapping.
+- `--proxy-path` `TEXT` (default `reverse-proxy`): Relative directory the reverse-proxy scaffold lives in (with --reverse-proxy).
 - `--force` (flag): Bypass the hub-and-spoke red-tier RAM advisory.
-- `--edge-role` `TEXT`: Gateway role that runs the Ignition Edge edition. Scaleout defaults to 'frontend'; hub-and-spoke defaults its spokes to Edge. Pass 'none' to disable the profile's edge default; pass a role name ('hub', 'gateway', ...) to opt that specific role in.
+- `--edge-role` `TEXT`: Gateway role that runs the Ignition Edge edition. Scaleout runs all gateways standard by default; hub-and-spoke defaults its spokes to Edge. Pass 'none' to disable the profile's edge default; pass a role name ('frontend', 'hub', 'gateway', ...) to opt that specific role in.
 - `--keep-cli` (flag): SE-demo mode: keep the lifecycle primitives in .ignition-stack/ so `ignition-stack reset` / `switch-profile` can regenerate the project. The default (one-shot) leaves a self-contained project with no CLI primitives behind.
 - `--output-dir`, `-o` `PATH`: Parent directory the project is written into. Defaults to the current directory.
 

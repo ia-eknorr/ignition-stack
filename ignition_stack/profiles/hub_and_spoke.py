@@ -68,9 +68,14 @@ class HubAndSpokeProfile:
                 )
             )
 
+        # Hub-and-spoke runs on a single shared network by default; callers
+        # (wizard / CLI) can opt into the frontend/backend split.
+        network_split = options.network_split if options.network_split is not None else False
+
         return ProjectConfig(
             name=name,
             profile=self.slug,
+            network_split=network_split,
             gateways=gateways,
             database=_database(options),
             services=list(options.services),

@@ -20,9 +20,13 @@ from rich.console import Console
 
 from ignition_stack import __version__
 from ignition_stack.commands.modules import modules_app
-from ignition_stack.completion import complete_edge_role, complete_profile
+from ignition_stack.completion import (
+    complete_edge_role,
+    complete_profile,
+    complete_reverse_proxy,
+)
 from ignition_stack.compose import write_project
-from ignition_stack.config import ProjectConfig
+from ignition_stack.config import ProjectConfig, ReverseProxyConfig
 from ignition_stack.lifecycle import (
     LIFECYCLE_DIR,
     RECORD_NAME,
@@ -102,6 +106,34 @@ def init(
         help="Spoke gateway count for the hub-and-spoke profile (ignored otherwise).",
         min=0,
     ),
+    frontends: int = typer.Option(
+        1,
+        "--frontends",
+        help="Frontend gateway count for the scaleout profile (ignored otherwise).",
+        min=1,
+    ),
+    network_split: bool | None = typer.Option(
+        None,
+        "--network-split/--no-network-split",
+        help=(
+            "Force the frontend/backend network split on or off. Default follows "
+            "the profile (scaleout splits, hub-and-spoke does not)."
+        ),
+    ),
+    reverse_proxy: str | None = typer.Option(
+        None,
+        "--reverse-proxy",
+        help=(
+            "Scaffold a reverse proxy of the given kind ('traefik'). Lays down a "
+            "README + POST-SETUP entry at --proxy-path. Omit for plain host-port mapping."
+        ),
+        autocompletion=complete_reverse_proxy,
+    ),
+    proxy_path: str = typer.Option(
+        "reverse-proxy",
+        "--proxy-path",
+        help="Relative directory the reverse-proxy scaffold lives in (with --reverse-proxy).",
+    ),
     force: bool = typer.Option(
         False,
         "--force",
@@ -111,10 +143,10 @@ def init(
         None,
         "--edge-role",
         help=(
-            "Gateway role that runs the Ignition Edge edition. Scaleout defaults "
-            "to 'frontend'; hub-and-spoke defaults its spokes to Edge. Pass 'none' "
-            "to disable the profile's edge default; pass a role name ('hub', "
-            "'gateway', ...) to opt that specific role in."
+            "Gateway role that runs the Ignition Edge edition. Scaleout runs all "
+            "gateways standard by default; hub-and-spoke defaults its spokes to "
+            "Edge. Pass 'none' to disable the profile's edge default; pass a role "
+            "name ('frontend', 'hub', 'gateway', ...) to opt that specific role in."
         ),
         autocompletion=complete_edge_role,
     ),
@@ -154,7 +186,17 @@ def init(
     if profile is None:
         config = _run_wizard_or_exit(name)
     else:
-        config = _build_from_profile(name, profile, spokes, force, edge_role)
+        config = _build_from_profile(
+            name,
+            profile,
+            spokes=spokes,
+            frontends=frontends,
+            force=force,
+            edge_role=edge_role,
+            network_split=network_split,
+            reverse_proxy=reverse_proxy,
+            proxy_path=proxy_path,
+        )
 
     try:
         files = write_project(config, target, keep_cli=keep_cli)
@@ -181,7 +223,16 @@ def init(
 
 
 def _build_from_profile(
-    name: str, profile: str, spokes: int, force: bool, edge_role: str | None
+    name: str,
+    profile: str,
+    *,
+    spokes: int,
+    frontends: int,
+    force: bool,
+    edge_role: str | None,
+    network_split: bool | None,
+    reverse_proxy: str | None,
+    proxy_path: str,
 ) -> ProjectConfig:
     """Materialize a config from the named profile + CLI flags, or exit cleanly."""
     try:
@@ -190,7 +241,15 @@ def _build_from_profile(
         console.print(f"[red]error[/red]: {exc}")
         raise typer.Exit(code=2) from exc
 
-    options = ProfileOptions(spokes=spokes, force=force, edge_role=edge_role)
+    proxy = ReverseProxyConfig(kind=reverse_proxy, path=proxy_path) if reverse_proxy else None
+    options = ProfileOptions(
+        spokes=spokes,
+        frontends=frontends,
+        force=force,
+        edge_role=edge_role,
+        network_split=network_split,
+        reverse_proxy=proxy,
+    )
     try:
         config = build_profile(profile, name, options)
     except ProfileError as exc:
@@ -293,13 +352,18 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
 
     Edge intent is recovered from whichever gateway runs the Edge edition (or
     'none' to keep the new profile from re-introducing its edge default); the
-    spoke count from the number of spoke-role gateways.
+    spoke count from the number of spoke-role gateways, the frontend count from
+    the number of frontend-role gateways, and the network split is carried over
+    verbatim so a reshape preserves the user's topology choice.
     """
     edge_roles = [gw.role or gw.name for gw in config.gateways if gw.ignition_edition == "edge"]
     spoke_count = sum(1 for gw in config.gateways if (gw.role or "") == "spoke")
+    frontend_count = sum(1 for gw in config.gateways if (gw.role or "") == "frontend")
     return ProfileOptions(
         spokes=spoke_count or 3,
+        frontends=frontend_count or 1,
         edge_role=edge_roles[0] if edge_roles else "none",
+        network_split=config.network_split,
         reverse_proxy=config.reverse_proxy,
         database_kind=config.database.kind if config.database else None,
         services=tuple(config.services),

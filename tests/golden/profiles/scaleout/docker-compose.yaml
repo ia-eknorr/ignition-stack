@@ -38,7 +38,6 @@ services:
       - frontend-data:/usr/local/bin/ignition/data
     environment:
       <<: *ignition-environment
-      IGNITION_EDITION: edge
     command: >
       -n ${COMPOSE_PROJECT_NAME}-frontend
       -m 2048
