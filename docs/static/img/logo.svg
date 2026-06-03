@@ -1,0 +1,13 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <title>ignition-stack</title>
+  <!-- Stacked layers: top face filled in Ignition orange, lower layers as
+       chevrons in lighter shades to suggest depth. Reads as a "stack". -->
+  <g fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <!-- bottom layer -->
+    <polyline points="22,128 100,172 178,128" stroke="#f7bb98" stroke-width="14"/>
+    <!-- middle layer -->
+    <polyline points="22,98 100,142 178,98" stroke="#f07b48" stroke-width="14"/>
+    <!-- top face -->
+    <polygon points="100,22 178,68 100,114 22,68" fill="#d9531e"/>
+  </g>
+</svg>
