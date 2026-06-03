@@ -20,6 +20,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the frontend/backend network split (tri-state, defaulting per profile), and
   reverse-proxy selection. `switch-profile` recovers the frontend count and
   network split so a reshape preserves the existing topology.
+- **Gateway redundancy.** `init --redundant <role>` (and the matching wizard
+  prompt) expands a single workhorse role into a master/backup pair: the
+  scaleout `backend`, the hub-and-spoke `hub`, or the standalone `gateway`.
+  Generation pre-seeds each node's `redundancy.xml` role and opens a plain
+  Gateway Network link so the pair boots already paired with no UI step;
+  replicated tiers (frontends, spokes) are rejected, and mixed-edition pairs
+  fail validation since Ignition redundancy is edition-matched.
 
 ### Changed
 

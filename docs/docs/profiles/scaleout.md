@@ -63,6 +63,10 @@ ignition-stack init demo --profile scaleout --no-network-split
 - `--edge-role frontend`: the frontends run Edge.
 - `--edge-role backend`: the backend runs Edge.
 
+## Redundancy
+
+The `backend` is the single workhorse, so it is the role you pair for failover. Add `--redundant backend` to expand it into a master/backup pair that boots already paired; see [Add a redundant gateway](../guides/redundancy.md). The replicated `frontend` tier scales out horizontally instead, so it cannot be paired.
+
 ## Reverse proxy
 
 `--reverse-proxy traefik` scaffolds the [ia-eknorr/traefik-reverse-proxy](https://github.com/ia-eknorr/traefik-reverse-proxy) setup under `reverse-proxy/` (override the location with `--proxy-path`). Omit it for plain host-port mapping.
