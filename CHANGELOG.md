@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-06-09
 
 ### Added
 
@@ -118,7 +118,8 @@ RUNNING with no manual UI steps.
 - Releases publish to PyPI automatically through GitHub Actions using Trusted
   Publishing (OIDC), with no stored API token.
 
-[Unreleased]: https://github.com/ia-eknorr/ignition-stack/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ia-eknorr/ignition-stack/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/ia-eknorr/ignition-stack/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ia-eknorr/ignition-stack/releases/tag/v0.1.0
