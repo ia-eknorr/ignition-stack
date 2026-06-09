@@ -2,16 +2,18 @@
 
 {{ reason }}
 
-This stack ships two gateways that aggregate over the **gateway-network**. The
+This stack's gateways aggregate over the **gateway-network**. The
 `gateway-network-link` row of the seedability matrix is partial, so approve the
 link by hand:
 {% for gw in gateways %}
 - **{{ gw.role }} gateway** (`{{ gw.name }}`): {{ gw.url }}
 {%- endfor %}
 
-1. Open the **frontend** gateway, go to Config -> Networking -> Gateway Network, and
-   add an outgoing connection to `${COMPOSE_PROJECT_NAME}-backend` on port 8060.
-2. Open the **backend** gateway and approve the incoming connection request.
+1. Open each **{{ link_source_role }}** gateway, go to Config -> Networking ->
+   Gateway Network, and add an outgoing connection to
+   `${COMPOSE_PROJECT_NAME}-{{ link_target_service }}` on port 8060.
+2. Open the **{{ link_target_role }}** gateway and approve the incoming
+   connection request.
 - **Copy from `.env`:**
 {%- for key, value in env_vars %}
   - `{{ key }}` = `{{ value }}`

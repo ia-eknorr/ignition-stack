@@ -17,6 +17,7 @@ from pathlib import Path
 from ignition_stack.compose import write_project
 from ignition_stack.config import ProjectConfig
 from ignition_stack.postsetup import generate_post_setup
+from ignition_stack.profiles import ProfileOptions, build_profile
 from ignition_stack.services.resolver import resolve
 
 
@@ -31,6 +32,26 @@ def test_fully_seedable_stack_states_no_manual_steps() -> None:
     assert "no manual steps required" in body.lower()
     # No "## " heading means no per-step sections were emitted.
     assert "## " not in body
+
+
+def test_hub_and_spoke_documents_spoke_to_hub_gateway_network_link() -> None:
+    """Hub-and-spoke's defining link is the spoke->hub gateway-network handshake.
+
+    It is UI-approved (not file-seeded), so the doc must surface it - not fall
+    through to the false "no manual steps required" note - and read for the
+    spoke/hub roles, not scaleout's frontend/backend.
+    """
+    config = resolve(build_profile("hub-and-spoke", "demo", ProfileOptions(spokes=2)))
+    body = generate_post_setup(config)
+
+    assert "Approve the gateway-network link" in body
+    assert "no manual steps required" not in body.lower()
+    # Profile-aware wording: spoke->hub, targeting the hub compose service.
+    assert "gateway-network-link" in body
+    assert "${COMPOSE_PROJECT_NAME}-hub" in body
+    # The scaleout roles must not leak into a hub-and-spoke doc.
+    assert "frontend" not in body
+    assert "backend" not in body
 
 
 def test_manual_secret_connection_carries_url_screen_and_env_var() -> None:

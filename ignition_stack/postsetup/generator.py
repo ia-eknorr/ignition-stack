@@ -57,8 +57,8 @@ from files. Bring it up with `docker compose up -d` and the gateway is ready.
 _GATEWAY_NETWORK_LINK_REASON = (
     "The Phase-1 matrix marks the gateway-network-link row partial: each "
     "gateway's UUID and the outbound peer-link path are file-seeded, but the "
-    "per-link approval happens in the gateway UI, so the frontend<->backend "
-    "link is finished by hand."
+    "per-link approval happens in the gateway UI, so the link is finished by "
+    "hand."
 )
 _MCP_MODULE_REASON = (
     "The Ignition MCP module is Early-Access and gated behind a survey, so the "
@@ -126,7 +126,7 @@ def _collect_steps(config: ProjectConfig) -> list[_Step]:
         for item in manifest.post_setup:
             steps.append(_Step(item.connection, item.reason, slug))
 
-    if config.profile == "scaleout":
+    if config.profile in ("scaleout", "hub-and-spoke"):
         steps.append(_Step("gateway-network-link", _GATEWAY_NETWORK_LINK_REASON, ""))
     if any(gw.redundancy is not None for gw in config.gateways):
         steps.append(_Step("redundancy-pairing", _REDUNDANCY_PAIRING_REASON, ""))
@@ -145,6 +145,12 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
     screen: a service step exposes that service's preset ``.env`` keys; the
     gateway-network-link step exposes ``COMPOSE_PROJECT_NAME`` (the link target
     is named after the compose project); the rest copy nothing.
+
+    The gateway-network-link step also carries the link's source/target roles
+    and the target's compose service name so its snippet reads correctly per
+    profile (scaleout: frontend->backend; hub-and-spoke: spoke->hub). They
+    always exist in the context (empty for other steps) because the Jinja env
+    runs under ``StrictUndefined``.
     """
     catalog = load_all_services()
     gateways = [
@@ -157,10 +163,20 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         for gw in config.gateways
     ]
 
+    link_source_role = ""
+    link_target_role = ""
+    link_target_service = ""
     if step.service:
         env_vars = sorted(catalog[step.service].env.items())
     elif step.connection == "gateway-network-link":
         env_vars = [("COMPOSE_PROJECT_NAME", config.name)]
+        # The spoke/frontend gateways open the outgoing link to the workhorse
+        # (hub/backend); the workhorse approves the incoming request.
+        if config.profile == "hub-and-spoke":
+            link_source_role, link_target_role = "spoke", "hub"
+        else:
+            link_source_role, link_target_role = "frontend", "backend"
+        link_target_service = link_target_role
     else:
         env_vars = []
 
@@ -174,6 +190,9 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         "redundancy_pairs": _redundancy_pairs(config),
         "env_vars": env_vars,
         "env_map": dict(env_vars),
+        "link_source_role": link_source_role,
+        "link_target_role": link_target_role,
+        "link_target_service": link_target_service,
         "proxy_path": config.reverse_proxy.path if config.reverse_proxy else "",
         "dropin_dir": "modules/dropin",
     }
