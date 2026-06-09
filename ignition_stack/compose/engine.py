@@ -132,9 +132,7 @@ def _render_database(config: ProjectConfig) -> str:
     """
     db = config.database
     assert db is not None
-    container_name_ref = (
-        f"{db.name}-${{COMPOSE_PROJECT_NAME}}" if config.is_multi_gateway else f"{db.name}-${{GATEWAY_NAME}}"
-    )
+    container_name_ref = f"{db.name}-${{COMPOSE_PROJECT_NAME}}" if config.is_multi_gateway else f"{db.name}-${{GATEWAY_NAME}}"
     tpl = _service_jinja_env().get_template(f"{db.kind}/compose.yaml.j2")
     return tpl.render(
         name=db.name,
@@ -186,9 +184,7 @@ def _service_dependencies(manifest: object, config: ProjectConfig) -> list[str]:
     return deps
 
 
-def _gateway_context(
-    gw: GatewayConfig, config: ProjectConfig, catalog: Catalog | None
-) -> dict[str, object]:
+def _gateway_context(gw: GatewayConfig, config: ProjectConfig, catalog: Catalog | None) -> dict[str, object]:
     """Build the per-gateway context dict shared by the bootstrap + gateway fragments."""
     multi = config.is_multi_gateway
 
@@ -250,24 +246,40 @@ def _bootstrap_context(ctx: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _ignition_context(
-    ctx: dict[str, object], config: ProjectConfig, multi: bool
-) -> dict[str, object]:
+def _ignition_context(ctx: dict[str, object], config: ProjectConfig, multi: bool) -> dict[str, object]:
     gw: GatewayConfig = ctx["gw"]  # type: ignore[assignment]
     # IGNITION_EDITION lives in the anchor as "standard", so only emit an
     # override when this gateway differs - keeps Phase 2's environment
     # block as the bare anchor reference.
     edition_override = gw.ignition_edition if gw.ignition_edition != "standard" else None
 
-    # Redundancy wiring (Phase 4, per the verified Phase-3 spike):
-    #  - Any node in a pair opens its incoming Gateway Network policy
-    #    (Unrestricted + no-SSL) so the plain redundancy link auto-approves.
-    #  - The backup additionally points a generic outgoing GAN connection at
-    #    the master (HOST/PORT/ENABLESSL - all three, not just HOST, or it
-    #    defaults to SSL:8060 and faults) and must NOT be renamed via -n: it
-    #    adopts the master's system name on first sync.
+    # Gateway Network wiring (Phase 4, per the verified Phase-3 spike, which the
+    # spike itself notes mirrors the publicdemo-all dev stack: 8088 / no-SSL /
+    # Unrestricted). Two kinds of GAN link ride this same plain, auto-approving
+    # path:
+    #  - Redundancy: the backup points an outgoing connection at its master and
+    #    must NOT be renamed via -n (it adopts the master's system name on sync).
+    #  - Multi-gateway profiles: each gateway names its peers in gan_outgoing
+    #    (scaleout frontend -> backend, hub-and-spoke spoke -> hub).
+    # Every GAN participant carries the full open incoming block. Mirroring the
+    # spike's BOTH-ends shape keeps requireSSL=false on the *initiator* too -
+    # the spike flagged that as the load-bearing setting for a plain link, so we
+    # don't shrink it to receiver-only.
     is_redundant = gw.redundancy is not None
     is_backup = is_redundant and gw.redundancy.mode == "backup"
+
+    # HOST/PORT/ENABLESSL trio per outgoing connection (all plain, SSL off).
+    gan_outgoing: list[dict[str, object]] = []
+    if is_backup:
+        gan_outgoing.append({"host": gw.redundancy.peer, "port": gw.redundancy.gan_port})
+    gan_outgoing.extend({"host": peer, "port": 8088} for peer in gw.gan_outgoing)
+
+    # A gateway opens the Unrestricted incoming policy when it takes part in the
+    # GAN at all: it is a redundancy node, it initiates a connection, or some
+    # other gateway opens one to it (hub/backend as a link target).
+    gan_targets = {peer for other in config.gateways for peer in other.gan_outgoing}
+    gan_incoming = is_redundant or bool(gan_outgoing) or gw.name in gan_targets
+
     return {
         "service_name": ctx["service_name"],
         "bootstrap_service_name": ctx["bootstrap_service_name"],
@@ -284,10 +296,9 @@ def _ignition_context(
         "modules_enabled": _modules_enabled_for(gw, ctx["module_identifiers"]),  # type: ignore[arg-type]
         "database_service": config.database.name if config.database else None,
         "networks": ctx["networks"],
-        "redundant": is_redundant,
         "rename": not is_backup,
-        "gan_peer_host": gw.redundancy.peer if is_backup else None,
-        "gan_port": gw.redundancy.gan_port if is_backup else None,
+        "gan_incoming": gan_incoming,
+        "gan_outgoing": gan_outgoing,
     }
 
 
@@ -296,19 +307,13 @@ def _module_identifiers_for(gw: GatewayConfig, catalog: Catalog | None) -> str:
     if not gw.modules:
         return ""
     if catalog is None:
-        raise ValueError(
-            f"gateway '{gw.name}' lists modules {gw.modules} but no catalog "
-            "was passed to render_compose; load modules.yaml first"
-        )
+        raise ValueError(f"gateway '{gw.name}' lists modules {gw.modules} but no catalog " "was passed to render_compose; load modules.yaml first")
     identifiers: list[str] = []
     for slug in gw.modules:
         try:
             entry = catalog.by_name(slug)
         except KeyError as exc:
-            raise ValueError(
-                f"gateway '{gw.name}' references unknown module '{slug}'; "
-                "check modules.yaml and the gateway config"
-            ) from exc
+            raise ValueError(f"gateway '{gw.name}' references unknown module '{slug}'; " "check modules.yaml and the gateway config") from exc
         # Modules-only env vars: JDBC drivers shouldn't be enumerated here.
         if not _is_module(entry):
             continue
@@ -372,10 +377,7 @@ def _describe(config: ProjectConfig) -> str:
     """Human-readable header comment summarizing the stack."""
     n = len(config.gateways)
     if n == 1 and config.database and config.database.kind == "postgres" and not config.services:
-        return (
-            "Walking skeleton: one Ignition 8.3 gateway, one Postgres, "
-            "env-driven commissioning so first boot needs no UI."
-        )
+        return "Walking skeleton: one Ignition 8.3 gateway, one Postgres, " "env-driven commissioning so first boot needs no UI."
     parts = [f"{n} Ignition 8.3 gateway{'s' if n != 1 else ''}"]
     if config.database:
         parts.append(f"one {config.database.kind}")

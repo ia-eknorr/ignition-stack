@@ -1,18 +1,23 @@
-## Approve the gateway-network link
+## Verify the gateway-network link
 
 {{ reason }}
-
-This stack ships two gateways that aggregate over the **gateway-network**. The
-`gateway-network-link` row of the seedability matrix is partial, so approve the
-link by hand:
-{% for gw in gateways %}
-- **{{ gw.role }} gateway** (`{{ gw.name }}`): {{ gw.url }}
+{% for link in gan_links %}
+- **{{ link.source_role }}** (`{{ link.source }}`): {{ link.source_url }}
+  connects to **{{ link.target_role }}** (`{{ link.target }}`) over the Gateway Network on **port {{ link.port }}** (plain, no SSL).
 {%- endfor %}
 
-1. Open the **frontend** gateway, go to Config -> Networking -> Gateway Network, and
-   add an outgoing connection to `${COMPOSE_PROJECT_NAME}-backend` on port 8060.
-2. Open the **backend** gateway and approve the incoming connection request.
-- **Copy from `.env`:**
-{%- for key, value in env_vars %}
-  - `{{ key }}` = `{{ value }}`
-{%- endfor %}
+Within about a minute of the gateways reaching RUNNING, open any gateway above
+and go to Config -> Networking -> Gateway Network. Each outgoing connection shows
+**Running**, and the receiving gateway lists the peer as **Approved**
+automatically - no UI approval is needed, because every node runs an
+`Unrestricted` policy with SSL disabled and the link rides plain port 8088.
+
+If a link has not formed, confirm the containers are up and re-check after the
+gateways finish starting. The plain-vs-SSL trade-off and the manual port-8060
+certificate-approval steps are documented in `docs/docs/guides/redundancy.md`
+(same Gateway Network mechanics).
+
+> **Security:** this stack uses **plain, non-SSL** gateway-network links with an
+> `Unrestricted` policy. That is safe only on an isolated demo network. For any
+> cross-host or production deployment, switch to SSL on port 8060 with approved
+> certificates.

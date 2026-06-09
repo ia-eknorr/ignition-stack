@@ -10,12 +10,13 @@ joins the frontend AND backend networks so a frontend can reach the DB the
 backend owns. The network split is on by default - that's the whole point
 of the scaleout demo - but ``options.network_split`` can override it.
 
-The plan's validation calls for "two networked gateways (frontend + backend)
-+ a DB; the gateway-network link config is present per the Phase-1 matrix";
-the gateway-network link itself is a follow-up resource set the seeding
-matrix marks ``file-seedable-config: yes``, so it travels with the
-``gateway-resources/`` overlay once that catalog grows. Today the
-``services`` list is empty by default; users add brokers/IDPs on top.
+The gateway-network link auto-forms with no UI approval: each frontend gets
+``gan_outgoing=["backend"]``, which the compose engine renders as a plain
+(non-SSL, port 8088) outgoing Gateway Network connection, and every participant
+runs an ``Unrestricted`` incoming policy so the link is accepted on sight - the
+same proven pattern the redundancy link rides. POST-SETUP carries a *verify*
+step (not a manual procedure). Today the ``services`` list is empty by default;
+users add brokers/IDPs on top.
 """
 
 from __future__ import annotations
@@ -47,6 +48,9 @@ class ScaleoutProfile:
                     role="frontend",
                     ignition_edition="edge" if edge_role == "frontend" else "standard",
                     http_port=9088 + (i - 1),
+                    # Each frontend opens a plain Gateway Network link to the
+                    # backend so the GAN auto-forms with no UI approval.
+                    gan_outgoing=["backend"],
                 )
             )
         gateways.append(

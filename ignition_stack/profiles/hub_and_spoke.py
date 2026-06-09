@@ -65,6 +65,9 @@ class HubAndSpokeProfile:
                     role="spoke",
                     ignition_edition="edge" if spokes_run_edge else "standard",
                     http_port=9088 + i,
+                    # Each spoke opens a plain Gateway Network link to the hub so
+                    # the GAN auto-forms with no UI approval; the hub aggregates.
+                    gan_outgoing=["hub"],
                 )
             )
 

@@ -83,11 +83,7 @@ def _check_or_update_golden(rel_path: str, actual: str) -> None:
                 n=2,
             )
         )
-        pytest.fail(
-            f"compose output diverges from golden '{rel_path}'.\n"
-            "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n"
-            f"{diff}"
-        )
+        pytest.fail(f"compose output diverges from golden '{rel_path}'.\n" "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n" f"{diff}")
 
 
 class ScriptedPrompter:
@@ -225,9 +221,9 @@ def test_scaleout_golden_and_renders_valid_yaml() -> None:
 
 
 def test_scaleout_emits_gateway_network_post_setup(tmp_path: Path) -> None:
-    """The matrix marks gateway-network-link partial: the link is set up via
-    POST-SETUP (UI approval) rather than fully file-seeded. The scaleout
-    profile must surface that step in the generated project."""
+    """The scaleout gateway-network links auto-form from env (plain port 8088,
+    Unrestricted policy), so POST-SETUP carries a *verify* step - not a manual
+    UI approval - that names both ends of each link."""
     config = build_profile("scaleout", "demo", ProfileOptions())
     assert config.profile == "scaleout"  # resolved-config assertion
     write_project(config, tmp_path / "demo")
@@ -235,9 +231,22 @@ def test_scaleout_emits_gateway_network_post_setup(tmp_path: Path) -> None:
     assert "gateway-network" in post_setup.lower()
     assert "frontend" in post_setup
     assert "backend" in post_setup
-    # Cite the matrix row name so the future Phase-1 follow-up that pins the
-    # JSON schema can grep for it.
-    assert "gateway-network-link" in post_setup
+    # It is a verification of an auto-formed plain (8088) link, not a manual step.
+    assert "Verify the gateway-network link" in post_setup
+    assert "8088" in post_setup
+
+
+def test_hub_and_spoke_emits_gateway_network_post_setup(tmp_path: Path) -> None:
+    """Hub-and-spoke now auto-forms each spoke -> hub link, so it surfaces the
+    same plain-8088 verify step (it never did before: the old gate was
+    scaleout-only)."""
+    config = build_profile("hub-and-spoke", "demo", ProfileOptions(spokes=2))
+    write_project(config, tmp_path / "demo")
+    post_setup = (tmp_path / "demo" / "POST-SETUP.md").read_text(encoding="utf-8")
+    assert "Verify the gateway-network link" in post_setup
+    assert "hub" in post_setup
+    assert "spoke-1" in post_setup and "spoke-2" in post_setup
+    assert "8088" in post_setup
 
 
 def test_scaleout_via_cli_writes_project(tmp_path: Path) -> None:

@@ -55,19 +55,15 @@ from files. Bring it up with `docker compose up -d` and the gateway is ready.
 # manifest. Kept here (not in a manifest) because they're a property of the
 # resolved topology, not of any one catalog entry.
 _GATEWAY_NETWORK_LINK_REASON = (
-    "The Phase-1 matrix marks the gateway-network-link row partial: each "
-    "gateway's UUID and the outbound peer-link path are file-seeded, but the "
-    "per-link approval happens in the gateway UI, so the frontend<->backend "
-    "link is finished by hand."
+    "This stack auto-forms its gateway-network links: each connecting gateway "
+    "opens a plain (non-SSL, port 8088) outgoing connection and every node runs "
+    "an Unrestricted incoming policy, so the links are accepted on sight with no "
+    "UI approval. This step is a verification, not a manual procedure - confirm "
+    "the links came up, and reach for the runbook only if one did not."
 )
-_MCP_MODULE_REASON = (
-    "The Ignition MCP module is Early-Access and gated behind a survey, so the "
-    "CLI cannot bundle it. Request the .modl, drop it in, and re-up the stack."
-)
+_MCP_MODULE_REASON = "The Ignition MCP module is Early-Access and gated behind a survey, so the " "CLI cannot bundle it. Request the .modl, drop it in, and re-up the stack."
 _REVERSE_PROXY_REASON = (
-    "The CLI never clones a proxy silently. The wizard scaffolded a README that "
-    "walks through installing ia-eknorr/traefik-reverse-proxy in front of the "
-    "stack."
+    "The CLI never clones a proxy silently. The wizard scaffolded a README that " "walks through installing ia-eknorr/traefik-reverse-proxy in front of the " "stack."
 )
 _REDUNDANCY_PAIRING_REASON = (
     "This stack seeds redundancy fully: a pre-seeded redundancy.xml sets each "
@@ -126,7 +122,7 @@ def _collect_steps(config: ProjectConfig) -> list[_Step]:
         for item in manifest.post_setup:
             steps.append(_Step(item.connection, item.reason, slug))
 
-    if config.profile == "scaleout":
+    if any(gw.gan_outgoing for gw in config.gateways):
         steps.append(_Step("gateway-network-link", _GATEWAY_NETWORK_LINK_REASON, ""))
     if any(gw.redundancy is not None for gw in config.gateways):
         steps.append(_Step("redundancy-pairing", _REDUNDANCY_PAIRING_REASON, ""))
@@ -142,9 +138,10 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
     """Build the render context one snippet sees.
 
     ``env_vars`` is the (key, value) list the reader copies into the gateway
-    screen: a service step exposes that service's preset ``.env`` keys; the
-    gateway-network-link step exposes ``COMPOSE_PROJECT_NAME`` (the link target
-    is named after the compose project); the rest copy nothing.
+    screen: a service step exposes that service's preset ``.env`` keys. The
+    gateway-network-link step copies nothing - the links auto-form from env, so
+    it carries ``gan_links`` (who connects to whom) for a verification readout
+    instead.
     """
     catalog = load_all_services()
     gateways = [
@@ -157,12 +154,7 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         for gw in config.gateways
     ]
 
-    if step.service:
-        env_vars = sorted(catalog[step.service].env.items())
-    elif step.connection == "gateway-network-link":
-        env_vars = [("COMPOSE_PROJECT_NAME", config.name)]
-    else:
-        env_vars = []
+    env_vars = sorted(catalog[step.service].env.items()) if step.service else []
 
     return {
         "project_name": config.name,
@@ -172,6 +164,7 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         "gateway_url": gateways[0]["url"],
         "gateways": gateways,
         "redundancy_pairs": _redundancy_pairs(config),
+        "gan_links": _gan_links(config),
         "env_vars": env_vars,
         "env_map": dict(env_vars),
         "proxy_path": config.reverse_proxy.path if config.reverse_proxy else "",
@@ -205,6 +198,33 @@ def _redundancy_pairs(config: ProjectConfig) -> list[dict[str, object]]:
             }
         )
     return pairs
+
+
+def _gan_links(config: ProjectConfig) -> list[dict[str, object]]:
+    """Auto-formed Gateway Network links, for the gateway-network-link step.
+
+    One entry per outgoing connection a gateway declares in ``gan_outgoing``
+    (scaleout frontend -> backend, hub-and-spoke spoke -> hub): it names the
+    source and target, their UIs, and the plain port the link rides so the
+    verification readout can point the reader at each end.
+    """
+    by_name = {gw.name: gw for gw in config.gateways}
+    links: list[dict[str, object]] = []
+    for gw in config.gateways:
+        for peer in gw.gan_outgoing:
+            target = by_name.get(peer)
+            links.append(
+                {
+                    "source": gw.name,
+                    "source_role": gw.role or gw.name,
+                    "source_url": f"http://localhost:{gw.http_port}",
+                    "target": peer,
+                    "target_role": (target.role or target.name) if target else peer,
+                    "target_url": f"http://localhost:{target.http_port}" if target else "",
+                    "port": 8088,
+                }
+            )
+    return links
 
 
 def _render_step(env: Environment, ctx: dict[str, object]) -> str:

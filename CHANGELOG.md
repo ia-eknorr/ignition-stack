@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Auto-forming gateway-network links.** The `scaleout` and `hub-and-spoke`
+  profiles now wire their Gateway Network with no UI approval: each connecting
+  gateway (every frontend → backend, every spoke → hub) gets a plain, non-SSL
+  outgoing connection on port 8088, and every participant runs an `Unrestricted`
+  incoming policy so the link is accepted on sight - the same proven pattern the
+  redundancy link already rode (and what the `publicdemo-all` dev stack uses).
+  Plain transport stays a demo-only default; cross-host or production
+  deployments should switch to SSL on port 8060 with approved certificates.
+  Verified end-to-end on 8.3.6: Edge spokes and standard frontends both reach
+  `Running` against their hub/backend on first boot with zero clicks.
 - **Update notifier.** A real command on an interactive terminal prints a
   one-line notice when a newer release is on PyPI, with the upgrade command
   tailored to the detected install method (pipx, `uv tool`, or pip). The check
@@ -15,6 +25,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   delays the command, and is suppressed in non-interactive use (CI, pipes) or
   by setting `IGNITION_STACK_NO_UPDATE_CHECK`. It only notifies; it never
   installs anything.
+
+### Changed
+
+- The `gateway-network-link` POST-SETUP step is now a verification of an
+  auto-formed link rather than a manual procedure, and fires for both `scaleout`
+  and `hub-and-spoke` (previously it was scaleout-only and walked through a
+  hand-approval on the SSL port).
 
 ## [0.3.0] - 2026-06-09
 

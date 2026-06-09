@@ -37,6 +37,11 @@ services:
       - hub-data:/usr/local/bin/ignition/data
     environment:
       <<: *ignition-environment
+      GATEWAY_NETWORK_ENABLED: "true"
+      GATEWAY_NETWORK_ALLOWINCOMING: "true"
+      GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
+      GATEWAY_NETWORK_REQUIRESSL: "false"
+      GATEWAY_NETWORK_REQUIRETWOWAYAUTH: "false"
     command: >
       -n ${COMPOSE_PROJECT_NAME}-hub
       -m 2048
@@ -70,6 +75,14 @@ services:
     environment:
       <<: *ignition-environment
       IGNITION_EDITION: edge
+      GATEWAY_NETWORK_ENABLED: "true"
+      GATEWAY_NETWORK_ALLOWINCOMING: "true"
+      GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
+      GATEWAY_NETWORK_REQUIRESSL: "false"
+      GATEWAY_NETWORK_REQUIRETWOWAYAUTH: "false"
+      GATEWAY_NETWORK_0_HOST: "hub"
+      GATEWAY_NETWORK_0_PORT: "8088"
+      GATEWAY_NETWORK_0_ENABLESSL: "false"
     command: >
       -n ${COMPOSE_PROJECT_NAME}-spoke-1
       -m 2048
@@ -103,6 +116,14 @@ services:
     environment:
       <<: *ignition-environment
       IGNITION_EDITION: edge
+      GATEWAY_NETWORK_ENABLED: "true"
+      GATEWAY_NETWORK_ALLOWINCOMING: "true"
+      GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
+      GATEWAY_NETWORK_REQUIRESSL: "false"
+      GATEWAY_NETWORK_REQUIRETWOWAYAUTH: "false"
+      GATEWAY_NETWORK_0_HOST: "hub"
+      GATEWAY_NETWORK_0_PORT: "8088"
+      GATEWAY_NETWORK_0_ENABLESSL: "false"
     command: >
       -n ${COMPOSE_PROJECT_NAME}-spoke-2
       -m 2048
@@ -136,6 +157,14 @@ services:
     environment:
       <<: *ignition-environment
       IGNITION_EDITION: edge
+      GATEWAY_NETWORK_ENABLED: "true"
+      GATEWAY_NETWORK_ALLOWINCOMING: "true"
+      GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
+      GATEWAY_NETWORK_REQUIRESSL: "false"
+      GATEWAY_NETWORK_REQUIRETWOWAYAUTH: "false"
+      GATEWAY_NETWORK_0_HOST: "hub"
+      GATEWAY_NETWORK_0_PORT: "8088"
+      GATEWAY_NETWORK_0_ENABLESSL: "false"
     command: >
       -n ${COMPOSE_PROJECT_NAME}-spoke-3
       -m 2048

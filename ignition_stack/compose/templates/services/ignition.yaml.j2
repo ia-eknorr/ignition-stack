@@ -25,18 +25,18 @@
 {%- if disable_active %}
     GATEWAY_MODULES_ENABLED: "{{ modules_enabled }}"
 {%- endif %}
-{%- if redundant %}
+{%- if gan_incoming %}
     GATEWAY_NETWORK_ENABLED: "true"
     GATEWAY_NETWORK_ALLOWINCOMING: "true"
     GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
     GATEWAY_NETWORK_REQUIRESSL: "false"
     GATEWAY_NETWORK_REQUIRETWOWAYAUTH: "false"
 {%- endif %}
-{%- if gan_peer_host %}
-    GATEWAY_NETWORK_0_HOST: "{{ gan_peer_host }}"
-    GATEWAY_NETWORK_0_PORT: "{{ gan_port }}"
-    GATEWAY_NETWORK_0_ENABLESSL: "false"
-{%- endif %}
+{%- for conn in gan_outgoing %}
+    GATEWAY_NETWORK_{{ loop.index0 }}_HOST: "{{ conn.host }}"
+    GATEWAY_NETWORK_{{ loop.index0 }}_PORT: "{{ conn.port }}"
+    GATEWAY_NETWORK_{{ loop.index0 }}_ENABLESSL: "false"
+{%- endfor %}
   command: >
 {%- if rename %}
     -n {{ gateway_name_ref }}
