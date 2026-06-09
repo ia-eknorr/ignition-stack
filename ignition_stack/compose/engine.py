@@ -132,10 +132,9 @@ def _render_database(config: ProjectConfig) -> str:
     """
     db = config.database
     assert db is not None
-    if config.is_multi_gateway:
-        container_name_ref = f"{db.name}-${{COMPOSE_PROJECT_NAME}}"
-    else:
-        container_name_ref = f"{db.name}-${{GATEWAY_NAME}}"
+    container_name_ref = (
+        f"{db.name}-${{COMPOSE_PROJECT_NAME}}" if config.is_multi_gateway else f"{db.name}-${{GATEWAY_NAME}}"
+    )
     tpl = _service_jinja_env().get_template(f"{db.kind}/compose.yaml.j2")
     return tpl.render(
         name=db.name,
@@ -216,10 +215,7 @@ def _gateway_context(
         # (DB/broker access). Gateways with no role tag default to
         # frontend membership; explicit role=backend lands a gateway on
         # only the backend (rare; used for backend-only edge cases).
-        if gw.role == "backend":
-            networks = [NETWORK_BACKEND]
-        else:
-            networks = [NETWORK_FRONTEND, NETWORK_BACKEND]
+        networks = [NETWORK_BACKEND] if gw.role == "backend" else [NETWORK_FRONTEND, NETWORK_BACKEND]
 
     module_identifiers = _module_identifiers_for(gw, catalog)
     cached_modules = bool(gw.modules)
