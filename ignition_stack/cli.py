@@ -56,6 +56,11 @@ from ignition_stack.profiles import (
     list_profiles,
 )
 from ignition_stack.services.resolver import resolve
+from ignition_stack.update_check import (
+    check_for_update,
+    detect_upgrade_command,
+    should_notify,
+)
 from ignition_stack.wizard import run_wizard
 
 app = typer.Typer(
@@ -89,6 +94,27 @@ def _root(
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())
         raise typer.Exit()
+    _notify_update_available()
+
+
+def _notify_update_available() -> None:
+    """Print a one-line advisory when a newer release is on PyPI.
+
+    Runs only for real subcommands (not --version or bare help) and only on an
+    interactive terminal. Best-effort: any failure inside the check is swallowed
+    rather than allowed to disrupt the command the user actually ran.
+    """
+    if not should_notify():
+        return
+    result = check_for_update()
+    if result is None:
+        return
+    current, latest = result
+    console.print(
+        f"[dim]update available[/dim] [yellow]{current}[/yellow] -> "
+        f"[green]{latest}[/green] · run: [cyan]{detect_upgrade_command()}[/cyan]",
+        highlight=False,
+    )
 
 
 def _profile_help() -> str:

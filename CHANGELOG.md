@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Update notifier.** A real command on an interactive terminal prints a
+  one-line notice when a newer release is on PyPI, with the upgrade command
+  tailored to the detected install method (pipx, `uv tool`, or pip). The check
+  is cached and runs at most once a day, fails silently when offline, never
+  delays the command, and is suppressed in non-interactive use (CI, pipes) or
+  by setting `IGNITION_STACK_NO_UPDATE_CHECK`. It only notifies; it never
+  installs anything.
+
 ## [0.3.0] - 2026-06-09
 
 ### Added
