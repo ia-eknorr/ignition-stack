@@ -5,7 +5,7 @@ description: The four canned stack shapes ignition-stack can generate, and how t
 
 # Architecture profiles
 
-A profile is the high-level shape of a stack: how many gateways, in what roles, on what network layout. You pick one at the start of the wizard, or name it directly with `ignition-stack init <name> --profile <slug>`. Every profile resolves to the same kind of project; they differ only in the gateways and topology they set up.
+A profile is the high-level shape of a stack: how many gateways, in what roles, on what network layout. You pick one at the start of the wizard, or name it directly with `ignition-stack init <name> --profile <slug>`. Every profile resolves to the same kind of project; they differ only in the gateways and topology they set up. Profiles are editable presets, not forks: the [wizard's Custom track](../guides/wizard.md) uses one as a starting point and lets you attach services per gateway from there.
 
 ## The four profiles
 

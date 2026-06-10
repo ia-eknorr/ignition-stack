@@ -82,6 +82,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Guides",
       items: [
+        "guides/wizard",
         "guides/reset-and-reshape",
         "guides/declarative-config",
         "guides/redundancy",
