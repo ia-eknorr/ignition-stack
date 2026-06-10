@@ -28,6 +28,7 @@ import pytest
 from ruamel.yaml import YAML
 from typer.testing import CliRunner
 
+from ignition_stack.catalog.builtins import default_builtin_catalog, jdbc_driver_for
 from ignition_stack.catalog.loader import load_catalog
 from ignition_stack.cli import app
 from ignition_stack.compose.engine import render_compose
@@ -83,7 +84,7 @@ def _check_or_update_golden(rel_path: str, actual: str) -> None:
                 n=2,
             )
         )
-        pytest.fail(f"compose output diverges from golden '{rel_path}'.\n" "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n" f"{diff}")
+        pytest.fail(f"compose output diverges from golden '{rel_path}'.\nRun with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n{diff}")
 
 
 class ScriptedPrompter:
@@ -115,7 +116,7 @@ class ScriptedPrompter:
     def integer(self, message: str, default: int, minimum: int = 0) -> int:
         return self._next()
 
-    def checkbox(self, message: str, choices: Sequence[tuple[str, str]]) -> list:
+    def checkbox(self, message: str, choices: Sequence[tuple[str, str, bool]]) -> list:
         return self._next()
 
 
@@ -494,7 +495,7 @@ def test_mcp_n8n_wizard_flow_writes_expected_project(tmp_path: Path) -> None:
             "mcp-n8n",  # profile
             "postgres",  # database
             "none",  # edge_role
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",  # reverse proxy
             True,  # summary confirm
         ]
@@ -566,7 +567,7 @@ def test_install_traefik_wizard_branch(tmp_path: Path) -> None:
             "postgres",  # database
             "none",  # edge_role
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "install",  # reverse proxy
             "reverse-proxy",  # path
             True,  # summary confirm
@@ -592,7 +593,7 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
             "spoke",  # edge_role
             False,  # network split (off for hub-and-spoke)
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",  # proxy
             True,  # advisory confirm
             True,  # summary confirm
@@ -613,7 +614,7 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
             "spoke",
             False,  # network split
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",
             False,  # decline advisory
             True,  # summary confirm
@@ -634,7 +635,7 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
             "spoke",
             False,  # network split
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",
             True,  # acknowledge red
             True,  # summary confirm
@@ -655,7 +656,7 @@ def test_wizard_red_tier_declined_falls_back() -> None:
             "spoke",
             False,  # network split
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",
             False,  # decline red
             True,  # summary confirm
@@ -678,7 +679,7 @@ def test_wizard_scaleout_frontends_and_network_split() -> None:
             "none",  # edge_role
             True,  # network split
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",  # reverse proxy
             True,  # summary confirm
         ]
@@ -700,7 +701,7 @@ def test_wizard_scaleout_network_split_declined() -> None:
             "none",
             False,  # network split off
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",
             True,
         ]
@@ -717,7 +718,7 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
             "postgres",
             "none",
             False,  # redundancy
-            False,  # disable built-ins?
+            False,  # customize modules? -> accept lean default
             "external",
             False,  # decline at summary
         ]
@@ -726,9 +727,82 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
     assert outcome.confirmed is False
 
 
-def test_wizard_disable_builtins_flows_to_every_gateway() -> None:
-    """Saying yes to the disable prompt and toggling modules stamps the slugs
-    onto each gateway and surfaces them in the summary."""
+# Module step (issue 42): the wizard pre-selects a curated default-enabled set
+# and stores the *un*selected remainder as disable_builtins. These tests assert
+# the inversion is exact and that the JDBC driver follows the database, rather
+# than mirroring which slugs happen to be in the default set (that invariant
+# lives in test_disable_builtins.py).
+
+
+def _expected_lean_disable(db_kind: str) -> tuple[str, ...]:
+    """The disable_builtins the decline path should yield for ``db_kind``: every
+    built-in outside the curated default set and the matching JDBC driver."""
+    cat = default_builtin_catalog()
+    enabled = set(cat.default_enabled_slugs)
+    driver = jdbc_driver_for(db_kind)
+    if driver is not None:
+        enabled.add(driver)
+    return tuple(sorted(cat.slugs - enabled))
+
+
+def test_wizard_modules_decline_applies_lean_default() -> None:
+    """The one-keystroke common path (decline "Customize?") must still produce a
+    lean gateway: disable_builtins is everything outside the curated set + the
+    matching JDBC driver. Wiring this to empty would make the feature a no-op on
+    the path everyone takes."""
+    prompter = ScriptedPrompter(
+        [
+            "standalone",  # profile
+            "postgres",  # database
+            "none",  # edge_role
+            False,  # redundancy
+            False,  # customize modules? -> accept lean default, no checkbox
+            "external",  # reverse proxy
+            True,  # summary confirm
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed
+
+    expected = _expected_lean_disable("postgres")
+    assert outcome.options.disable_builtins == expected
+    # The default set is kept, the rest disabled, the matching driver kept and
+    # the non-matching one dropped.
+    disabled = set(outcome.options.disable_builtins)
+    assert "perspective" not in disabled and "vision" in disabled
+    assert "postgresql-jdbc-driver" not in disabled
+    assert "mariadb-jdbc-driver" in disabled
+    # Applied uniformly to every gateway.
+    for gw in outcome.config.gateways:
+        assert gw.disable_builtins == list(expected)
+    # The summary shows the lean ENABLED set by display name, not the long
+    # disabled list.
+    assert any("Perspective" in line and "PostgreSQL JDBC Driver" in line for line in outcome.summary_lines)
+
+
+def test_wizard_modules_jdbc_driver_follows_database() -> None:
+    """Choosing MariaDB enables the MariaDB JDBC driver and disables the
+    Postgres one - the driver tracks the database, not a static default."""
+    prompter = ScriptedPrompter(
+        [
+            "standalone",
+            "mariadb",  # database -> MariaDB JDBC driver
+            "none",
+            False,
+            False,  # accept lean default
+            "external",
+            True,
+        ]
+    )
+    outcome = walk("demo", prompter)
+    disabled = set(outcome.options.disable_builtins)
+    assert "mariadb-jdbc-driver" not in disabled
+    assert "postgresql-jdbc-driver" in disabled
+
+
+def test_wizard_modules_customize_inverts_enabled_selection() -> None:
+    """Customizing and choosing exactly which modules to ENABLE stores the
+    inverse as disable_builtins, and the choice flows to every gateway."""
     prompter = ScriptedPrompter(
         [
             "scaleout",  # profile
@@ -737,39 +811,42 @@ def test_wizard_disable_builtins_flows_to_every_gateway() -> None:
             "none",  # edge_role
             True,  # network split
             False,  # redundancy
-            True,  # disable built-ins? -> opens checkbox
-            ["vision", "sfc"],  # checkbox selection
+            True,  # customize modules? -> opens checkbox
+            ["perspective", "vision"],  # ENABLE only these two
             "external",  # reverse proxy
             True,  # summary confirm
         ]
     )
     outcome = walk("demo", prompter)
     assert outcome.confirmed
-    assert outcome.options.disable_builtins == ("vision", "sfc")
-    # Applied uniformly: every gateway carries the same disable list.
+
+    all_slugs = default_builtin_catalog().slugs
+    expected = tuple(sorted(all_slugs - {"perspective", "vision"}))
+    assert outcome.options.disable_builtins == expected
+    disabled = set(outcome.options.disable_builtins)
+    assert "perspective" not in disabled and "vision" not in disabled
+    assert "opc-ua" in disabled  # a default-on module the user chose to drop
     for gw in outcome.config.gateways:
-        assert gw.disable_builtins == ["vision", "sfc"]
-    assert any("vision, sfc" in line for line in outcome.summary_lines)
+        assert gw.disable_builtins == list(expected)
 
 
-def test_wizard_disable_builtins_declined_keeps_all_on() -> None:
-    """Declining the disable prompt never calls the checkbox and leaves the
-    gateway's disable list empty (no whitelist emitted downstream)."""
+def test_wizard_modules_no_database_enables_no_jdbc_driver() -> None:
+    """With no database, no JDBC driver is pre-enabled, so all three drivers end
+    up disabled."""
     prompter = ScriptedPrompter(
         [
             "standalone",
-            "postgres",
+            "none",  # database -> None, no JDBC driver
             "none",  # edge_role
             False,  # redundancy
-            False,  # disable built-ins? -> no checkbox
+            False,  # accept lean default
             "external",
-            True,  # summary confirm
+            True,
         ]
     )
     outcome = walk("demo", prompter)
-    assert outcome.confirmed
-    assert outcome.options.disable_builtins == ()
-    assert all(gw.disable_builtins == [] for gw in outcome.config.gateways)
+    disabled = set(outcome.options.disable_builtins)
+    assert {"postgresql-jdbc-driver", "mariadb-jdbc-driver", "mssql-jdbc-driver"} <= disabled
 
 
 # --------------------------------------------------------------------------- #
@@ -842,3 +919,27 @@ def test_questionary_select_drops_unknown_default(monkeypatch) -> None:
     answer = QuestionaryPrompter().select("Profile?", choices, default="does-not-exist")
     assert captured["default"] is None
     assert answer == "scaleout"
+
+
+def test_questionary_checkbox_forwards_checked_flag(monkeypatch) -> None:
+    """The opt-in module step relies on questionary pre-checking the default
+    set. The adapter must forward each triple's ``checked`` flag onto the
+    ``Choice``; dropping it would render every row unchecked and silently defeat
+    the curated default. The ScriptedPrompter bypasses this adapter, so it needs
+    its own guard."""
+    import questionary
+
+    captured: dict = {}
+
+    def spy_checkbox(message, *, choices, **kwargs):
+        captured["choices"] = choices
+        return _StubQuestion([choices[0].value])
+
+    monkeypatch.setattr(questionary, "checkbox", spy_checkbox)
+
+    triples = [("perspective", "Perspective", True), ("vision", "Vision", False)]
+    answer = QuestionaryPrompter().checkbox("Select modules to ENABLE:", triples)
+
+    checked_by_value = {c.value: c.checked for c in captured["choices"]}
+    assert checked_by_value == {"perspective": True, "vision": False}
+    assert answer == ["perspective"]

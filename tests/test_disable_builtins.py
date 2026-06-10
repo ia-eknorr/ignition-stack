@@ -14,7 +14,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from ignition_stack.catalog.builtins import load_builtin_catalog
+from ignition_stack.catalog.builtins import (
+    default_builtin_catalog,
+    jdbc_driver_for,
+    load_builtin_catalog,
+)
 from ignition_stack.catalog.loader import load_catalog
 from ignition_stack.cli import _options_from_config, app
 from ignition_stack.compose.engine import render_compose
@@ -43,10 +47,9 @@ def test_builtin_catalog_version_matches_default_image() -> None:
     without re-deriving builtin_modules.yaml, the version drift is caught here.
     The smoke guard then verifies the module *set* against the live image."""
     default_tag = ProjectConfig.model_fields["ignition_image"].default
-    assert default_tag.endswith(f":{load_builtin_catalog().ignition_version}"), (
-        f"builtin_modules.yaml is pinned to {load_builtin_catalog().ignition_version} "
-        f"but the default image is {default_tag}; re-derive the built-in catalog"
-    )
+    assert default_tag.endswith(
+        f":{load_builtin_catalog().ignition_version}"
+    ), f"builtin_modules.yaml is pinned to {load_builtin_catalog().ignition_version} but the default image is {default_tag}; re-derive the built-in catalog"
 
 
 def test_builtin_catalog_loads_and_has_unique_slugs() -> None:
@@ -70,6 +73,63 @@ def test_identifiers_excluding_drops_only_named_slugs() -> None:
 def test_identifiers_excluding_empty_keeps_all() -> None:
     cat = load_builtin_catalog()
     assert cat.identifiers_excluding([]) == [m.identifier for m in cat.modules]
+
+
+# --------------------------------------------------------------------------- #
+# Curated default-enabled set (issue 42)
+#
+# The smoke guard checks the module *set* against the live image but knows
+# nothing about the `default_enabled` curation flag, so these unit tests carry
+# the invariants that keep the wizard's opt-in default honest. They encode
+# things that could plausibly break, not a mirror of the YAML.
+# --------------------------------------------------------------------------- #
+
+JDBC_IDENTIFIER_PREFIX = "com.inductiveautomation.jdbc."
+
+
+def test_default_enabled_set_is_a_subset_of_known_slugs() -> None:
+    """A typo'd default slug would silently pre-check nothing; pin the set to
+    real catalog slugs."""
+    cat = default_builtin_catalog()
+    assert cat.default_enabled_slugs <= cat.slugs
+    assert cat.default_enabled_slugs, "the curated default set must not be empty"
+
+
+def test_sql_historian_default_implies_historian_core_default() -> None:
+    """SQL Historian depends on Historian Core at boot. The strict whitelist
+    quarantines anything unlisted, so a default set that enables sql-historian
+    without historian-core would break the gateway. (An extra core module is
+    harmless; a missing required one is not - so the implication only needs to
+    hold in this direction.)"""
+    enabled = default_builtin_catalog().default_enabled_slugs
+    if "sql-historian" in enabled:
+        assert "historian-core" in enabled
+
+
+def test_jdbc_drivers_are_never_statically_default_enabled() -> None:
+    """JDBC drivers are database-driven: the wizard enables the one matching the
+    chosen DB, never a static default. Every JDBC driver must therefore be
+    default_enabled=False, or two drivers would ship on a single-DB stack."""
+    jdbc = [m for m in default_builtin_catalog().modules if m.identifier.startswith(JDBC_IDENTIFIER_PREFIX)]
+    assert jdbc, "expected JDBC drivers in the catalog"
+    assert all(not m.default_enabled for m in jdbc)
+
+
+@pytest.mark.parametrize(
+    ("db_kind", "expected"),
+    [
+        ("postgres", "postgresql-jdbc-driver"),
+        ("mariadb", "mariadb-jdbc-driver"),
+        ("mysql", "mariadb-jdbc-driver"),  # no MySQL driver ships; MariaDB is wire-compatible
+        ("mongo", None),  # not a JDBC store
+        (None, None),  # no database
+    ],
+)
+def test_jdbc_driver_for_maps_database_to_driver(db_kind: str | None, expected: str | None) -> None:
+    assert jdbc_driver_for(db_kind) == expected
+    # And when a driver is named, it is a real catalog slug (not a dangling ref).
+    if expected is not None:
+        assert expected in default_builtin_catalog().slugs
 
 
 # --------------------------------------------------------------------------- #
