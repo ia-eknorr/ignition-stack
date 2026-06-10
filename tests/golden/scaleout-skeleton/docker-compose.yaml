@@ -29,8 +29,6 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     hostname: ${COMPOSE_PROJECT_NAME}-frontend
     depends_on:
-      db:
-        condition: service_healthy
       bootstrap-frontend:
         condition: service_completed_successfully
     ports:

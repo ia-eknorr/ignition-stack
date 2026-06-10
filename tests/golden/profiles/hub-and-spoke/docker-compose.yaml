@@ -64,8 +64,6 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-spoke-1
     hostname: ${COMPOSE_PROJECT_NAME}-spoke-1
     depends_on:
-      db:
-        condition: service_healthy
       bootstrap-spoke-1:
         condition: service_completed_successfully
     ports:
@@ -105,8 +103,6 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-spoke-2
     hostname: ${COMPOSE_PROJECT_NAME}-spoke-2
     depends_on:
-      db:
-        condition: service_healthy
       bootstrap-spoke-2:
         condition: service_completed_successfully
     ports:
@@ -146,8 +142,6 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-spoke-3
     hostname: ${COMPOSE_PROJECT_NAME}-spoke-3
     depends_on:
-      db:
-        condition: service_healthy
       bootstrap-spoke-3:
         condition: service_completed_successfully
     ports:

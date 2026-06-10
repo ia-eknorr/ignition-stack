@@ -114,8 +114,9 @@ def _render_services(
         blocks.append(bootstrap_tpl.render(**_bootstrap_context(ctx)))
         blocks.append(ignition_tpl.render(**_ignition_context(ctx, config, multi)))
 
-    db = config.database_instance()
-    if db is not None:
+    # One fragment per database instance, in registry (input) order. The first
+    # is the primary; each emits its own per-kind <KIND>_IMAGE env key.
+    for db in config.database_instances():
         blocks.append(_render_database(db, config))
 
     for inst in _ordered_service_instances(config):
@@ -142,19 +143,26 @@ def _render_database(db: ServiceInstance, config: ProjectConfig) -> str:
 
 
 def _render_catalog_service(inst: ServiceInstance, config: ProjectConfig) -> str:
-    """Render one non-database catalog service instance from its compose fragment."""
+    """Render one non-database catalog service instance from its compose fragment.
+
+    A service that ``requires:`` a database capability (Keycloak -> sql-database)
+    is wired to the *first* database instance whose kind provides it (registry
+    order), so a heterogeneous stack (e.g. mongo + postgres) points Keycloak at
+    the SQL one rather than the primary. Services that need no database get a
+    ``None`` db context (the fragment simply never references it).
+    """
     manifest = load_service(inst.service)
     tpl = _service_jinja_env().get_template(f"{inst.service}/compose.yaml.j2")
     networks = [manifest.network] if config.network_split else []
-    db = config.database_instance()
+    req_db = _requirement_database(manifest, config)
     return tpl.render(
         name=inst.id,
         image_ref=f"${{{manifest.image_env}}}",
         container_name_ref=f"{inst.id}-${{COMPOSE_PROJECT_NAME}}",
         networks=networks,
-        depends_on=_service_dependencies(manifest, config),
-        db_host=db.id if db is not None else None,
-        db_kind=db.service if db is not None else None,
+        depends_on=[req_db.id] if req_db is not None else [],
+        db_host=req_db.id if req_db is not None else None,
+        db_kind=req_db.service if req_db is not None else None,
     )
 
 
@@ -172,33 +180,33 @@ def _ordered_service_instances(config: ProjectConfig) -> list[ServiceInstance]:
 def _gateway_database_service(gw: GatewayConfig, config: ProjectConfig) -> str | None:
     """The DB service name this gateway depends on, or None.
 
-    A gateway depends on the database only when it attaches to it. Lowered
-    configs attach every gateway to the one database, so this reproduces the
-    historical "every gateway depends_on db" wiring; an edge gateway with no DB
-    attachment emits no dependency (and gets no seeded db-connection).
+    A gateway depends on the database it attaches to. The registry allows at
+    most one database attachment per gateway (resolver-enforced), so the first
+    db-kind attachment is unambiguous. Lowered configs attach every non-edge
+    gateway to the one database, reproducing the historical "every gateway
+    depends_on db" wiring; an edge gateway with no DB attachment emits no
+    dependency (and gets no seeded db-connection).
     """
-    db = config.database_instance()
-    if db is None:
+    db_ids = {inst.id for inst in config.database_instances()}
+    return next((att.instance for att in gw.services if att.instance in db_ids), None)
+
+
+def _requirement_database(manifest: object, config: ProjectConfig) -> ServiceInstance | None:
+    """First database instance (registry order) that satisfies a ``requires:``.
+
+    Returns the database whose manifest ``provides`` a capability this service
+    requires - the SQL database for Keycloak's ``sql-database`` need. ``None``
+    when the service requires no database capability. Picking by registry order
+    keeps a heterogeneous stack deterministic.
+    """
+    requires = set(getattr(manifest, "requires", []))
+    if not requires:
         return None
-    if any(att.instance == db.id for att in gw.services):
-        return db.id
+    catalog = load_all_services()
+    for inst in config.database_instances():
+        if requires & set(catalog[inst.service].provides):
+            return inst
     return None
-
-
-def _service_dependencies(manifest: object, config: ProjectConfig) -> list[str]:
-    """Compose service names this service depends on (each rendered healthy).
-
-    A service's ``requires:`` capabilities map to the provider already present
-    in the resolved config. Today the only requirable capability is a SQL
-    database, so the dependency is the database instance name when present.
-    """
-    requires = getattr(manifest, "requires", [])
-    deps: list[str] = []
-    db_caps = {"sql-database", "postgres-compatible", "mysql-compatible", "document-store"}
-    db = config.database_instance()
-    if db is not None and any(cap in db_caps for cap in requires):
-        deps.append(db.id)
-    return deps
 
 
 def _gateway_context(gw: GatewayConfig, config: ProjectConfig, catalog: Catalog | None) -> dict[str, object]:
@@ -324,13 +332,13 @@ def _module_identifiers_for(gw: GatewayConfig, catalog: Catalog | None) -> str:
     if not gw.modules:
         return ""
     if catalog is None:
-        raise ValueError(f"gateway '{gw.name}' lists modules {gw.modules} but no catalog " "was passed to render_compose; load modules.yaml first")
+        raise ValueError(f"gateway '{gw.name}' lists modules {gw.modules} but no catalog was passed to render_compose; load modules.yaml first")
     identifiers: list[str] = []
     for slug in gw.modules:
         try:
             entry = catalog.by_name(slug)
         except KeyError as exc:
-            raise ValueError(f"gateway '{gw.name}' references unknown module '{slug}'; " "check modules.yaml and the gateway config") from exc
+            raise ValueError(f"gateway '{gw.name}' references unknown module '{slug}'; check modules.yaml and the gateway config") from exc
         # Modules-only env vars: JDBC drivers shouldn't be enumerated here.
         if not _is_module(entry):
             continue
@@ -401,7 +409,7 @@ def _describe(config: ProjectConfig) -> str:
     db = config.database_instance()
     services = [inst.id for inst in config.non_database_instances()]
     if n == 1 and db is not None and db.service == "postgres" and not services:
-        return "Walking skeleton: one Ignition 8.3 gateway, one Postgres, " "env-driven commissioning so first boot needs no UI."
+        return "Walking skeleton: one Ignition 8.3 gateway, one Postgres, env-driven commissioning so first boot needs no UI."
     parts = [f"{n} Ignition 8.3 gateway{'s' if n != 1 else ''}"]
     if db is not None:
         parts.append(f"one {db.service}")

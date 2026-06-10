@@ -18,4 +18,11 @@ env: {}
 # plus the internal-secret-provider that holds its password, per the Phase-1
 # matrix db-connection row (file-seedable-config: yes, file-seedable-secret: yes).
 seeds_gateway_resources: true
+# One database per stack (the per-kind ${POSTGRES_IMAGE} and shared
+# ${DB_USER}/${DB_PASSWORD} env keys collide otherwise) and never on an Edge
+# gateway: a leaf Edge node must not hold a SQL/historian connection. The schema
+# edge invariant and the resolver's lowering both read placement.never_on_edge.
+singleton: true
+placement:
+  never_on_edge: true
 post_setup: []

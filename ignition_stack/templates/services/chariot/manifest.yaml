@@ -14,6 +14,14 @@ env:
   CHARIOT_HTTP_PORT: "8090"
   CHARIOT_MQTT_PORT: "1886"
 seeds_gateway_resources: false
+# One MQTT broker per stack; wires block names the Cirrus Link modules + the
+# Sparkplug-capable MQTT port the Phase-3 IIoT overlay consumes.
+singleton: true
+wires:
+  mqtt:
+    transmission_module: mqtt-transmission
+    engine_module: mqtt-engine
+    port: 1883
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

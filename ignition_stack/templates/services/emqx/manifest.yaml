@@ -13,6 +13,15 @@ env:
   EMQX_DASHBOARD_PORT: "18083"
   EMQX_DASHBOARD_PASSWORD: public
 seeds_gateway_resources: false
+# One MQTT broker per stack (issue #43 non-goal: no multi-broker). The wires
+# block names the Cirrus Link Transmission/Engine modules the Phase-3 IIoT
+# overlay fans out, plus the Sparkplug-capable MQTT port (1883).
+singleton: true
+wires:
+  mqtt:
+    transmission_module: mqtt-transmission
+    engine_module: mqtt-engine
+    port: 1883
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

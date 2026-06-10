@@ -180,13 +180,13 @@ class RedundancyConfig(BaseModel):
 
     mode: Literal["master", "backup"] = Field(description="This node's redundancy role: 'master' or 'backup'.")
     peer: str = Field(
-        description=("Service name of the other node in the pair. The backup points at " "the master here (and over the Gateway Network); the master points " "at its backup."),
+        description=("Service name of the other node in the pair. The backup points at the master here (and over the Gateway Network); the master points at its backup."),
     )
     gan_port: int = Field(
         default=8088,
         ge=1,
         le=65535,
-        description=("Gateway Network port the redundancy link rides. 8088 is plain " "(non-SSL) and auto-approves; 8060 is SSL and needs a cert approval."),
+        description=("Gateway Network port the redundancy link rides. 8088 is plain (non-SSL) and auto-approves; 8060 is SSL and needs a cert approval."),
     )
     seed_redundancy_xml: bool = Field(
         default=True,
@@ -287,7 +287,7 @@ class GatewayConfig(BaseModel):
     @classmethod
     def _validate_name(cls, v: str) -> str:
         if not _NAME_RE.match(v):
-            raise ValueError("gateway name must start with a lowercase letter and contain only " "lowercase letters, digits, hyphens, or underscores")
+            raise ValueError("gateway name must start with a lowercase letter and contain only lowercase letters, digits, hyphens, or underscores")
         return v
 
     @field_validator("ignition_edition")
@@ -405,7 +405,7 @@ class ReverseProxyConfig(BaseModel):
         if not stripped:
             raise ValueError("reverse-proxy path must not be empty")
         if stripped.startswith("/") or "\\" in stripped:
-            raise ValueError("reverse-proxy path must be a relative POSIX path " "(no leading '/' and no backslashes)")
+            raise ValueError("reverse-proxy path must be a relative POSIX path (no leading '/' and no backslashes)")
         # Normalize "./foo" -> "foo" so the writer can join cleanly.
         return stripped.removeprefix("./")
 
@@ -466,7 +466,7 @@ class ProjectConfig(BaseModel):
     )
     mcp_dropin: bool = Field(
         default=False,
-        description=("True when the project should scaffold modules/dropin/ for the " "EA-gated MCP module. Set by the mcp-n8n profile."),
+        description=("True when the project should scaffold modules/dropin/ for the EA-gated MCP module. Set by the mcp-n8n profile."),
     )
     profile: str | None = Field(
         default=None,
@@ -487,12 +487,24 @@ class ProjectConfig(BaseModel):
         return self.gateways[0].http_port
 
     def database_instance(self) -> ServiceInstance | None:
-        """The sole database instance in the registry, or None.
+        """The *primary* database instance in the registry, or None.
 
-        Phase 1 pins the registry to at most one database instance (the
-        resolver rejects a second), so a plain ``next(...)`` is unambiguous.
+        Phase 2 allows multiple database instances (of distinct kinds); the
+        primary is the first one in registry (input) order. The shared
+        ``DB_USER`` / ``DB_PASSWORD`` / ``DB_HOST`` env keys come from it, and a
+        single-database stack (the common case) has exactly one, so this stays
+        the unambiguous "the database" for callers that predate multi-DB.
         """
         return next((inst for inst in self.service_instances if inst.is_database), None)
+
+    def database_instances(self) -> list[ServiceInstance]:
+        """All database instances in registry (input) order.
+
+        Phase 2: the engine renders one fragment per database here, and each
+        emits its own per-kind ``<KIND>_IMAGE`` env key. The first entry is the
+        primary (see :meth:`database_instance`).
+        """
+        return [inst for inst in self.service_instances if inst.is_database]
 
     def non_database_instances(self) -> list[ServiceInstance]:
         """Registry instances that are not databases, in registry (input) order."""
@@ -529,7 +541,7 @@ class ProjectConfig(BaseModel):
     @classmethod
     def _validate_name(cls, v: str) -> str:
         if not _NAME_RE.match(v):
-            raise ValueError("name must start with a lowercase letter and contain only " "lowercase letters, digits, hyphens, or underscores")
+            raise ValueError("name must start with a lowercase letter and contain only lowercase letters, digits, hyphens, or underscores")
         return v
 
     @model_validator(mode="after")
@@ -572,6 +584,42 @@ class ProjectConfig(BaseModel):
             for att in gw.services:
                 if att.instance not in ids:
                     raise ValueError(f"gateway '{gw.name}' attaches to unknown service instance '{att.instance}'; declared instances: {sorted(ids)}")
+        return self
+
+    @model_validator(mode="after")
+    def _edge_gateways_hold_no_never_on_edge_service(self) -> ProjectConfig:
+        """An Edge gateway must not attach to a ``placement.never_on_edge`` service.
+
+        This is the issue #43 fix made declarative: Edge is a leaf edition that
+        must never hold a database connection, so a hand-authored attachment from
+        an ``ignition_edition == "edge"`` gateway to any instance whose manifest
+        declares ``never_on_edge`` (every database) is rejected here. The
+        resolver's legacy lowering never *produces* such an attachment (it skips
+        edge gateways when fanning a database out), so this guards declarative /
+        ``-f`` configs. Only meaningful once the registry is populated; a legacy
+        input config carries no attachments yet.
+        """
+        if not self.service_instances:
+            return self
+        from ignition_stack.services.loader import load_all_services
+
+        catalog = load_all_services()
+        by_id = {inst.id: inst for inst in self.service_instances}
+        for gw in self.gateways:
+            if gw.ignition_edition != "edge":
+                continue
+            for att in gw.services:
+                inst = by_id.get(att.instance)
+                if inst is None:
+                    continue
+                manifest = catalog.get(inst.service)
+                if manifest is not None and manifest.placement.never_on_edge:
+                    raise ValueError(
+                        f"edge gateway '{gw.name}' attaches to instance "
+                        f"'{inst.id}' ({inst.service}), which must not run on an "
+                        "Edge gateway; Edge gateways are leaf nodes and must not "
+                        "hold database connections"
+                    )
         return self
 
     @model_validator(mode="after")

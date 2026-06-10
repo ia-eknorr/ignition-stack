@@ -308,8 +308,12 @@ def _render_env(config: ProjectConfig) -> str:
 
     db = config.database_instance()
     lines.append(f"IGNITION_IMAGE={config.ignition_image}")
-    if db is not None:
-        lines.append(f"{db.image_env}={db.image}")
+    # Each database instance emits its own per-kind <KIND>_IMAGE key (registry
+    # order); a single-database stack emits exactly one, keeping the historical
+    # output. The shared DB_USER/DB_PASSWORD/DB_HOST keys below come from the
+    # primary (first) database - all databases share one credential pair.
+    for inst in config.database_instances():
+        lines.append(f"{inst.image_env}={inst.image}")
     lines += [
         f"ADMIN_USERNAME={config.admin_username}",
         f"ADMIN_PASSWORD={config.admin_password}",

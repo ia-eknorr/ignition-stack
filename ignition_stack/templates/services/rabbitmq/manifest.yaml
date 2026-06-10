@@ -15,6 +15,14 @@ env:
   RABBITMQ_MQTT_PORT: "1885"
   RABBITMQ_MGMT_PORT: "15672"
 seeds_gateway_resources: false
+# One MQTT broker per stack; RabbitMQ fronts Sparkplug MQTT on 1883 via its
+# enabled mqtt plugin. Wires names the Cirrus Link modules the IIoT overlay uses.
+singleton: true
+wires:
+  mqtt:
+    transmission_module: mqtt-transmission
+    engine_module: mqtt-engine
+    port: 1883
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

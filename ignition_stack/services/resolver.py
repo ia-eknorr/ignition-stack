@@ -111,29 +111,102 @@ def _lower_legacy(config: ProjectConfig, catalog: dict[str, ServiceManifest]) ->
                     extra_databases=list(db.extra_databases),
                 )
             )
-        _attach_all_gateways(config, db.name)
+        _attach_all_gateways(config, db.name, catalog)
         config.database = None
 
     for slug in config.services:
         if not any(inst.id == slug for inst in config.service_instances):
             config.service_instances.append(ServiceInstance(id=slug, service=slug))
-        _attach_all_gateways(config, slug)
+        _attach_all_gateways(config, slug, catalog)
     config.services = []
 
 
-def _attach_all_gateways(config: ProjectConfig, instance_id: str, role: str = "consumer") -> None:
-    """Give every gateway a ``role`` attachment to ``instance_id`` (idempotent)."""
+def _attach_all_gateways(
+    config: ProjectConfig,
+    instance_id: str,
+    catalog: dict[str, ServiceManifest],
+    role: str = "consumer",
+) -> None:
+    """Give every eligible gateway a ``role`` attachment to ``instance_id``.
+
+    Idempotent (skips gateways that already attach). **Edge gateways are skipped
+    for ``placement.never_on_edge`` instances** (databases): this is the issue
+    #43 fix, so lowering a legacy hub-and-spoke stack with edge spokes no longer
+    hands those spokes a database connection. The skip is what intentionally
+    changes that golden - the spoke loses the db seed overlay, its ``depends_on``
+    on the db, the GATEWAY db env var, and any JDBC driver.
+    """
+    inst = next((i for i in config.service_instances if i.id == instance_id), None)
+    never_on_edge = inst is not None and catalog[inst.service].placement.never_on_edge
     for gw in config.gateways:
+        if never_on_edge and gw.ignition_edition == "edge":
+            continue
         if not any(att.instance == instance_id for att in gw.services):
             gw.services.append(ServiceAttachment(instance=instance_id, role=role))
 
 
 def _validate_registry(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
-    """Reject more than one database instance (multi-DB is Phase 2)."""
-    db_instances = [inst for inst in config.service_instances if catalog[inst.service].kind == "database"]
-    if len(db_instances) > 1:
-        kinds = ", ".join(inst.service for inst in db_instances)
-        raise ResolveError(f"only one database is supported per stack, but the registry has {len(db_instances)} ({kinds}); multi-database stacks arrive in a later phase")
+    """Enforce the Phase-2 multi-instance bounds across the registry.
+
+    Phase 2 relaxes the old single-database rule but only within a bounded
+    scope, because the compose fragments and .env share a per-kind/global key
+    vocabulary that collides outside these bounds:
+
+    - **Multiple databases allowed iff distinct kinds.** Two ``postgres``
+      instances would both want ``${POSTGRES_IMAGE}`` and the shared
+      ``${DB_USER}`` / ``${DB_PASSWORD}`` keys - same-kind duplicates collide.
+    - **All databases share one user/password** - the fragments read the single
+      shared ``DB_USER`` / ``DB_PASSWORD`` pair.
+    - **At most one database attachment per gateway** - a gateway seeds one
+      ``internal-secret-provider``; a second db's secret would overwrite it.
+    - **Singletons** (``singleton: true`` manifests: db / idp / broker) appear at
+      most once per slug.
+    - **At most one mqtt-broker instance** per stack (multi-broker is a non-goal).
+    """
+    instances = config.service_instances
+    db_instances = [inst for inst in instances if catalog[inst.service].kind == "database"]
+
+    db_kinds = [inst.service for inst in db_instances]
+    dup_kinds = sorted({k for k in db_kinds if db_kinds.count(k) > 1})
+    if dup_kinds:
+        raise ResolveError(
+            f"duplicate database kind(s) {dup_kinds}: two instances of the same "
+            "database kind collide on the per-kind image and shared "
+            "DB_USER/DB_PASSWORD .env keys, so same-kind duplicates are not "
+            "supported; use distinct database kinds"
+        )
+
+    credentials = {(inst.user, inst.password) for inst in db_instances}
+    if len(credentials) > 1:
+        raise ResolveError(
+            "all database instances must share the same user/password: the "
+            "compose fragments consume the single shared DB_USER/DB_PASSWORD "
+            f"keys, but the registry declares {len(credentials)} distinct pairs"
+        )
+
+    db_ids = {inst.id for inst in db_instances}
+    for gw in config.gateways:
+        attached = [att.instance for att in gw.services if att.instance in db_ids]
+        if len(attached) > 1:
+            joined = ", ".join(attached)
+            raise ResolveError(
+                f"gateway '{gw.name}' attaches to {len(attached)} databases "
+                f"({joined}); a gateway may hold at most one database connection "
+                "(the seeded internal-secret-provider would collide)"
+            )
+
+    singleton_counts: dict[str, int] = {}
+    for inst in instances:
+        if catalog[inst.service].singleton:
+            singleton_counts[inst.service] = singleton_counts.get(inst.service, 0) + 1
+    over = sorted(slug for slug, count in singleton_counts.items() if count > 1)
+    if over:
+        raise ResolveError(f"service(s) {over} are singletons (singleton: true) but the registry declares more than one instance of each; declare a single instance")
+
+    brokers = [inst for inst in instances if catalog[inst.service].kind == "mqtt-broker"]
+    if len(brokers) > 1:
+        kinds = ", ".join(inst.service for inst in brokers)
+        raise ResolveError(f"only one mqtt-broker is supported per stack, but the registry has {len(brokers)} ({kinds}); multi-broker stacks are a non-goal")
 
 
 def _database_instance(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> ServiceInstance | None:
@@ -215,7 +288,7 @@ def _satisfy_required_capabilities(config: ProjectConfig, catalog: dict[str, Ser
             continue
         db_kind = _DEFAULT_DB_FOR_CAPABILITY.get(cap)
         if db_kind is None:
-            raise ResolveError(f"required capability '{cap}' is provided by no selected service " "and cannot be auto-added")
+            raise ResolveError(f"required capability '{cap}' is provided by no selected service and cannot be auto-added")
         existing = _database_instance(config, catalog)
         if existing is not None:
             raise ResolveError(
@@ -224,7 +297,7 @@ def _satisfy_required_capabilities(config: ProjectConfig, catalog: dict[str, Ser
                 "supported per stack; choose a compatible database"
             )
         config.service_instances.append(ServiceInstance(id="db", service=db_kind))
-        _attach_all_gateways(config, "db")
+        _attach_all_gateways(config, "db", catalog)
 
 
 def _capability_satisfied(cap: str, config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> bool:

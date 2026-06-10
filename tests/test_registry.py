@@ -130,16 +130,18 @@ def test_jdbc_driver_attaches_only_to_db_attached_gateways() -> None:
         assert "mysql-jdbc" in gw.modules
 
 
-def test_more_than_one_database_instance_rejected() -> None:
+def test_two_databases_of_the_same_kind_rejected() -> None:
+    """Phase 2 allows multiple databases only of DISTINCT kinds; two postgres
+    collide on the per-kind ${POSTGRES_IMAGE} and shared DB_USER/DB_PASSWORD."""
     config = ProjectConfig(
         name="x",
         database=None,
         service_instances=[
             ServiceInstance(id="db", service="postgres"),
-            ServiceInstance(id="db2", service="mysql"),
+            ServiceInstance(id="db2", service="postgres"),
         ],
     )
-    with pytest.raises(ResolveError, match="only one database"):
+    with pytest.raises(ResolveError, match="duplicate database kind"):
         resolve(config)
 
 

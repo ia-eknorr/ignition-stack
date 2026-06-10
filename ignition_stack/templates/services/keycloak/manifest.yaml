@@ -16,6 +16,10 @@ env:
   KEYCLOAK_ADMIN_PASSWORD: admin
   KEYCLOAK_HTTP_PORT: "8081"
 seeds_gateway_resources: false
+# One IdP per stack: a second Keycloak would collide on its KEYCLOAK_* env keys
+# and the shared realm seed. Keycloak may run alongside an Edge gateway via SSO,
+# so it sets no never_on_edge placement (only its database does).
+singleton: true
 post_setup:
   - connection: identity-provider
     reason: >-

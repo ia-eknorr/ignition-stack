@@ -12,4 +12,8 @@ provides:
 requires: []
 env: {}
 seeds_gateway_resources: false
+# One database per stack; never on an Edge gateway (see postgres manifest).
+singleton: true
+placement:
+  never_on_edge: true
 post_setup: []
