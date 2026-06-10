@@ -25,6 +25,15 @@
 # `identifier` is the fully-qualified module id used verbatim in
 # GATEWAY_MODULES_ENABLED. `slug` is the friendly kebab name a user puts in
 # `disable_builtins`. `name` is the gateway's display name (for wizard labels).
+#
+# `default_enabled` marks the curated "typical demo" set the interactive wizard
+# pre-checks (opt-in selection). It does NOT change the engine math or the
+# non-interactive profile path - profiles still enable every built-in. It only
+# seeds the wizard's checkbox so the common path is a lean gateway. The JDBC
+# drivers are all `default_enabled: false` on purpose: the wizard enables the
+# one matching the chosen database (see `jdbc_driver_for`), not a static one.
+# The smoke guard checks the module *set*, not this curation flag, so the
+# default-set invariants live in tests/test_disable_builtins.py instead.
 
 version: 1
 
@@ -36,87 +45,116 @@ modules:
   - slug: alarm-notification
     identifier: com.inductiveautomation.alarm-notification
     name: Alarm Notification
+    default_enabled: true
   - slug: allen-bradley-driver
     identifier: com.inductiveautomation.opcua.drivers.ablegacy
     name: Allen-Bradley Driver
+    default_enabled: false
   - slug: bacnet-driver
     identifier: com.inductiveautomation.opcua.drivers.bacnet
     name: BACnet Driver
+    default_enabled: false
   - slug: enterprise-administration
     identifier: com.inductiveautomation.eam
     name: Enterprise Administration
+    default_enabled: false
   - slug: event-streams
     identifier: com.inductiveautomation.eventstream
     name: Event Streams
+    default_enabled: false
   - slug: historian-core
     identifier: com.inductiveautomation.historian
     name: Historian Core
+    default_enabled: true
   - slug: kafka-connector
     identifier: com.inductiveautomation.connectors.kafka
     name: Kafka Connector
+    default_enabled: false
   - slug: legacy-dnp3-driver
     identifier: com.inductiveautomation.opcua.drivers.dnp3
     name: Legacy DNP3 Driver
+    default_enabled: false
   - slug: logix-driver
     identifier: com.inductiveautomation.opcua.drivers.logix
     name: Logix Driver
+    default_enabled: false
   - slug: mariadb-jdbc-driver
     identifier: com.inductiveautomation.jdbc.mariadb
     name: MariaDB JDBC Driver
+    default_enabled: false
   - slug: micro800-driver
     identifier: com.inductiveautomation.opcua.drivers.micro800
     name: Micro800 Driver
+    default_enabled: false
   - slug: mitsubishi-driver
     identifier: com.inductiveautomation.opcua.drivers.mitsubishi
     name: Mitsubishi Driver
+    default_enabled: false
   - slug: modbus-driver
     identifier: com.inductiveautomation.opcua.drivers.modbus
     name: Modbus Driver
+    default_enabled: false
   - slug: mssql-jdbc-driver
     identifier: com.inductiveautomation.jdbc.mssql
     name: MSSQL JDBC Driver
+    default_enabled: false
   - slug: omron-driver
     identifier: com.inductiveautomation.opcua.drivers.omron
     name: Omron Driver
+    default_enabled: false
   - slug: opc-ua
     identifier: com.inductiveautomation.opcua
     name: OPC-UA
+    default_enabled: true
   - slug: perspective
     identifier: com.inductiveautomation.perspective
     name: Perspective
+    default_enabled: true
   - slug: postgresql-jdbc-driver
     identifier: com.inductiveautomation.jdbc.postgresql
     name: PostgreSQL JDBC Driver
+    default_enabled: false
   - slug: reporting
     identifier: com.inductiveautomation.reporting
     name: Reporting
+    default_enabled: true
   - slug: sfc
     identifier: com.inductiveautomation.sfc
     name: SFC
+    default_enabled: false
   - slug: siemens-drivers
     identifier: com.inductiveautomation.opcua.drivers.siemens
     name: Siemens Drivers
+    default_enabled: false
   - slug: siemens-enhanced-driver
     identifier: com.inductiveautomation.opcua.drivers.siemens-symbolic
     name: Siemens Enhanced Driver
+    default_enabled: false
   - slug: sms-notification
     identifier: com.inductiveautomation.sms-notification
     name: SMS Notification
+    default_enabled: false
   - slug: sql-bridge
     identifier: com.inductiveautomation.sqlbridge
     name: SQL Bridge
+    default_enabled: true
   - slug: sql-historian
     identifier: com.inductiveautomation.historian.sql
     name: SQL Historian
+    default_enabled: true
   - slug: symbol-factory
     identifier: com.inductiveautomation.symbol-factory
     name: Symbol Factory
+    default_enabled: false
   - slug: udp-and-tcp-drivers
     identifier: com.inductiveautomation.opcua.drivers.tcpudp
     name: UDP and TCP Drivers
+    default_enabled: false
   - slug: vision
     identifier: com.inductiveautomation.vision
     name: Vision
+    default_enabled: false
   - slug: webdev
     identifier: com.inductiveautomation.webdev
     name: WebDev
+    default_enabled: false

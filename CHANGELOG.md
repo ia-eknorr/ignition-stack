@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The wizard's module step is now opt-in.** Instead of enabling every built-in
+  and offering an opt-out "select modules to DISABLE" checklist, the wizard
+  pre-selects a lean curated set - Perspective, OPC-UA, SQL Bridge, the historian
+  pair, Alarm Notification, Reporting - and the user adds or removes from there.
+  The common path is one keystroke: declining "Customize the enabled gateway
+  modules?" accepts the lean default. The JDBC driver follows the chosen database
+  (Postgres → PostgreSQL driver, MariaDB/MySQL → the wire-compatible MariaDB
+  driver, Mongo/none → no driver) rather than shipping all three. The curated set
+  lives in `builtin_modules.yaml` as a `default_enabled` flag next to the pinned
+  catalog, so it survives image bumps. Only the interactive wizard changed: the
+  stored `disable_builtins` shape, the `GATEWAY_MODULES_ENABLED` whitelist math,
+  the `--disable-builtin` CLI flag, and the non-interactive profile path are all
+  unchanged, so existing builds render byte-for-byte identically.
+
 ## [0.4.0] - 2026-06-09
 
 ### Added

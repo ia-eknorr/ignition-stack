@@ -25,9 +25,12 @@ Step order:
 6. **Redundancy** - for profiles with a single workhorse role (standalone
    gateway, scaleout backend, hub-and-spoke hub), whether to add a backup
    node and form a master/backup pair. Defaults off.
-7. **Disable built-ins** - opt-in multi-select to turn off built-in IA
-   modules (Vision, SFC, ...) stack-wide via GATEWAY_MODULES_ENABLED.
-   Gated behind a confirm; defaults to keeping everything.
+7. **Modules** - opt-in selection of built-in IA modules. A curated default
+   set (Perspective, OPC-UA, SQL Bridge, the historian pair, Alarm
+   Notification, Reporting) plus the JDBC driver matching the chosen database
+   are pre-checked; the un-selected remainder becomes ``disable_builtins``,
+   which the engine inverts into the GATEWAY_MODULES_ENABLED whitelist. Gated
+   behind a "Customize?" confirm; declining accepts the lean default.
 8. **Reverse proxy** - existing/install-Traefik/skip.
 9. **Summary + confirm**.
 
@@ -120,9 +123,11 @@ class Prompter(Protocol):
     def integer(self, message: str, default: int, minimum: int = 0) -> int:
         """Integer prompt; validates ``>= minimum`` and returns the parsed value."""
 
-    def checkbox(self, message: str, choices: Sequence[tuple[str, str]]) -> list[str]:
-        """Multi-select prompt. ``choices`` is ``(value, label)`` pairs; returns
-        the list of chosen ``value``\\ s (possibly empty - nothing toggled)."""
+    def checkbox(self, message: str, choices: Sequence[tuple[str, str, bool]]) -> list[str]:
+        """Multi-select prompt. ``choices`` is ``(value, label, checked)`` triples
+        where ``checked`` pre-selects the row; returns the list of chosen
+        ``value``\\ s (the pre-checked rows the user left on, plus any they added,
+        minus any they toggled off). Possibly empty."""
 
 
 @dataclass
@@ -169,7 +174,7 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     edge_role = _ask_edge_role(prompter, profile_slug)
     network_split = _ask_network_split(prompter, profile_slug)
     redundant_role = _ask_redundancy(prompter, profile_slug)
-    disable_builtins = _ask_disable_builtins(prompter)
+    disable_builtins = _ask_disable_builtins(prompter, db_kind)
     reverse_proxy = _ask_reverse_proxy(prompter)
 
     options = ProfileOptions(
@@ -242,9 +247,7 @@ def _ask_network_split(prompter: Prompter, profile_slug: str) -> bool | None:
     if profile_slug not in _MULTI_GATEWAY_PROFILES:
         return None
     default = _DEFAULT_NETWORK_SPLIT.get(profile_slug, False)
-    return prompter.confirm(
-        "Split frontend/backend onto separate Docker networks?", default=default
-    )
+    return prompter.confirm("Split frontend/backend onto separate Docker networks?", default=default)
 
 
 def _ask_redundancy(prompter: Prompter, profile_slug: str) -> str | None:
@@ -264,26 +267,37 @@ def _ask_redundancy(prompter: Prompter, profile_slug: str) -> str | None:
     return role if make else None
 
 
-def _ask_disable_builtins(prompter: Prompter) -> tuple[str, ...]:
-    """Optionally pick built-in modules to turn off across the stack.
+def _ask_disable_builtins(prompter: Prompter, db_kind: str | None) -> tuple[str, ...]:
+    """Pick the built-in modules to run, opt-in from a curated default set.
 
-    Gated behind a confirm so the common path (keep everything) is one
-    keystroke and nobody is forced to scroll a 29-item checklist. Saying yes
-    opens a multi-select of every built-in (alphabetical by display name);
-    whatever is toggled becomes the stack-wide ``disable_builtins``.
+    The catalog marks a lean "typical demo" set as default-enabled (Perspective,
+    OPC-UA, SQL Bridge, the historian pair, Alarm Notification, Reporting); the
+    wizard pre-checks those plus the JDBC driver matching the chosen database.
+    The common path is one keystroke - declining "Customize?" accepts that set
+    as-is. Customizing opens a checkbox with the default set pre-checked, so the
+    user adds or removes from a sensible baseline instead of scrolling a 29-item
+    list. Whatever ends up *un*selected becomes the stored ``disable_builtins``;
+    the engine emits the inverse whitelist. Returning the inverse keeps the
+    config model, the writer, and the non-interactive profile path unchanged.
     """
-    if not prompter.confirm(
-        "Disable any built-in gateway modules (e.g. Vision, SFC)?", default=False
-    ):
-        return ()
-    from ignition_stack.catalog.builtins import default_builtin_catalog
+    from ignition_stack.catalog.builtins import default_builtin_catalog, jdbc_driver_for
 
     catalog = default_builtin_catalog()
-    choices = [(m.slug, m.name) for m in sorted(catalog.modules, key=lambda m: m.name.lower())]
-    chosen = prompter.checkbox(
-        "Select modules to DISABLE (space toggles, enter confirms):", choices
-    )
-    return tuple(chosen)
+    all_slugs = catalog.slugs
+    prechecked = set(catalog.default_enabled_slugs)
+    driver = jdbc_driver_for(db_kind)
+    if driver is not None:
+        prechecked.add(driver)
+
+    if not prompter.confirm("Customize the enabled gateway modules?", default=False):
+        # One-keystroke common path: accept the curated default set as-is. The
+        # disabled set is everything outside it, including the non-matching JDBC
+        # drivers - which is exactly the lean gateway the opt-in model promises.
+        return tuple(sorted(all_slugs - prechecked))
+
+    choices = [(m.slug, m.name, m.slug in prechecked) for m in sorted(catalog.modules, key=lambda m: m.name.lower())]
+    chosen = set(prompter.checkbox("Select modules to ENABLE (space toggles, enter confirms):", choices))
+    return tuple(sorted(all_slugs - chosen))
 
 
 def _ask_database(prompter: Prompter) -> str | None:
@@ -362,9 +376,7 @@ def _confirm_advisory_if_needed(prompter: Prompter, options: ProfileOptions) -> 
         # on a usable stack instead of bailing the whole wizard.
         return _with(options, spokes=4)
     # red
-    confirmed = prompter.confirm(
-        f"{advisory.message}\nAcknowledge and continue anyway?", default=False
-    )
+    confirmed = prompter.confirm(f"{advisory.message}\nAcknowledge and continue anyway?", default=False)
     return _with(options, force=True) if confirmed else _with(options, spokes=4)
 
 
@@ -379,27 +391,34 @@ def _summarize(config: ProjectConfig, profile_slug: str, options: ProfileOptions
     lines = [
         f"profile      : {profile_slug}",
         f"project name : {config.name}",
-        f"gateways     : {len(config.gateways)} "
-        f"({', '.join(f'{g.name}={g.ignition_edition}' for g in config.gateways)})",
+        f"gateways     : {len(config.gateways)} ({', '.join(f'{g.name}={g.ignition_edition}' for g in config.gateways)})",
         f"database     : {config.database.kind if config.database else 'none'}",
         f"services     : {', '.join(config.services) if config.services else '(none)'}",
         f"network split: {'on' if config.network_split else 'off'}",
-        "redundancy   : "
-        + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
-        "disabled mods: "
-        + (", ".join(options.disable_builtins) if options.disable_builtins else "(none - all on)"),
-        "reverse proxy: "
-        + (
-            f"install Traefik at './{config.reverse_proxy.path}'"
-            if config.reverse_proxy
-            else "external (plain host-port mapping)"
-        ),
+        "redundancy   : " + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
+        "modules      : " + _enabled_modules_label(options.disable_builtins),
+        "reverse proxy: " + (f"install Traefik at './{config.reverse_proxy.path}'" if config.reverse_proxy else "external (plain host-port mapping)"),
     ]
     if config.mcp_dropin:
         lines.append("MCP dropin   : modules/dropin/ (EA-gated; see POST-SETUP.md)")
     if options.force:
         lines.append("advisory     : --force acknowledged")
     return lines
+
+
+def _enabled_modules_label(disable_builtins: tuple[str, ...]) -> str:
+    """Render the kept (enabled) built-ins by display name for the summary.
+
+    The opt-in model usually disables more than it keeps, so the summary shows
+    the lean *enabled* set - the few modules the gateway will actually run - by
+    display name, which is the choice the user just made. ``disable_builtins``
+    is the stored inverse; enabled is the catalog minus it.
+    """
+    from ignition_stack.catalog.builtins import default_builtin_catalog
+
+    disabled = set(disable_builtins)
+    kept = [m.name for m in sorted(default_builtin_catalog().modules, key=lambda m: m.name.lower()) if m.slug not in disabled]
+    return ", ".join(kept) if kept else "(none - all built-ins disabled)"
 
 
 def _ask_summary_confirm(prompter: Prompter, summary: list[str]) -> bool:
@@ -463,10 +482,10 @@ class QuestionaryPrompter:
         answer = questionary.text(message, default=str(default), validate=_validate).unsafe_ask()
         return int(answer)
 
-    def checkbox(self, message: str, choices: Sequence[tuple[str, str]]) -> list[str]:
+    def checkbox(self, message: str, choices: Sequence[tuple[str, str, bool]]) -> list[str]:
         import questionary
 
-        q_choices = [questionary.Choice(title=label, value=value) for value, label in choices]
+        q_choices = [questionary.Choice(title=label, value=value, checked=checked) for value, label, checked in choices]
         answer = questionary.checkbox(message, choices=q_choices).unsafe_ask()
         # Questionary returns None on Ctrl-C and a list otherwise; normalize.
         return [str(a) for a in (answer or [])]

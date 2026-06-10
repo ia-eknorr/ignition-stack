@@ -52,6 +52,15 @@ class BuiltinModule(BaseModel):
         ),
     ]
     name: Annotated[str, Field(min_length=1, description="Gateway display name (wizard label).")]
+    default_enabled: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Whether the wizard pre-checks this module in its opt-in selection. Curation only - it does not change the engine math or the non-interactive profile path."
+            ),
+        ),
+    ]
 
 
 class BuiltinCatalog(BaseModel):
@@ -79,6 +88,17 @@ class BuiltinCatalog(BaseModel):
     def slugs(self) -> set[str]:
         """Every known built-in slug."""
         return {m.slug for m in self.modules}
+
+    @property
+    def default_enabled_slugs(self) -> set[str]:
+        """Slugs the wizard pre-checks in its opt-in module selection.
+
+        Curation only: this seeds the wizard checkbox and never feeds the
+        engine math or the non-interactive profile path. The matching JDBC
+        driver is added on top by :func:`jdbc_driver_for`, so JDBC drivers are
+        deliberately absent here (they are database-driven, not statically on).
+        """
+        return {m.slug for m in self.modules if m.default_enabled}
 
     def identifiers_excluding(self, disabled_slugs: list[str]) -> list[str]:
         """FQ identifiers of every built-in whose slug is not in ``disabled_slugs``.
@@ -109,9 +129,7 @@ def load_builtin_catalog(path: Path | None = None) -> BuiltinCatalog:
     try:
         return BuiltinCatalog.model_validate(raw)
     except ValidationError as exc:
-        raise BuiltinCatalogLoadError(
-            f"{DEFAULT_BUILTIN_CATALOG_NAME} failed schema validation:\n{exc}"
-        ) from exc
+        raise BuiltinCatalogLoadError(f"{DEFAULT_BUILTIN_CATALOG_NAME} failed schema validation:\n{exc}") from exc
 
 
 @lru_cache(maxsize=1)
@@ -130,6 +148,29 @@ def builtin_slugs() -> frozenset[str]:
     return frozenset(default_builtin_catalog().slugs)
 
 
+# Which built-in JDBC driver the wizard enables for each database kind. The
+# catalog ships no MySQL-specific driver - Ignition connects to MySQL with the
+# wire-compatible MariaDB driver, so both map to it. Mongo (not a JDBC store)
+# and an absent database have no entry and resolve to None.
+_JDBC_DRIVER_FOR_DB: dict[str, str] = {
+    "postgres": "postgresql-jdbc-driver",
+    "mariadb": "mariadb-jdbc-driver",
+    "mysql": "mariadb-jdbc-driver",
+}
+
+
+def jdbc_driver_for(db_kind: str | None) -> str | None:
+    """The built-in JDBC driver slug the wizard enables for ``db_kind``.
+
+    Data-driven so the wizard stays declarative: postgres/mariadb map to their
+    own driver, mysql reuses the MariaDB driver, and mongo / no-database get
+    none. Returns ``None`` when no driver applies.
+    """
+    if db_kind is None:
+        return None
+    return _JDBC_DRIVER_FOR_DB.get(db_kind)
+
+
 def validate_disable_slugs(slugs: list[str]) -> None:
     """Raise ``ValueError`` if any slug is not a known built-in.
 
@@ -141,10 +182,7 @@ def validate_disable_slugs(slugs: list[str]) -> None:
     known = builtin_slugs()
     unknown = [s for s in slugs if s not in known]
     if unknown:
-        raise ValueError(
-            f"unknown built-in module slug(s): {', '.join(unknown)}. "
-            f"Valid slugs are: {', '.join(sorted(known))}"
-        )
+        raise ValueError(f"unknown built-in module slug(s): {', '.join(unknown)}. Valid slugs are: {', '.join(sorted(known))}")
 
 
 def _read_yaml_text(path: Path | None) -> str:
@@ -165,7 +203,5 @@ def _read_yaml_text(path: Path | None) -> str:
     repo_root = Path(__file__).resolve().parents[2]
     dev_path = repo_root / DEFAULT_BUILTIN_CATALOG_NAME
     if not dev_path.is_file():
-        raise BuiltinCatalogLoadError(
-            f"{DEFAULT_BUILTIN_CATALOG_NAME} not found in package data or at {dev_path}."
-        )
+        raise BuiltinCatalogLoadError(f"{DEFAULT_BUILTIN_CATALOG_NAME} not found in package data or at {dev_path}.")
     return dev_path.read_text(encoding="utf-8")

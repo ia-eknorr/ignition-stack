@@ -1,13 +1,29 @@
 ---
 title: Disable built-in modules
-description: Turn off shipped IA modules like Vision or SFC to slim a stack down, expressed as a friendly blocklist that the generator inverts into the gateway's module whitelist.
+description: Choose which shipped IA modules run — the wizard pre-selects a lean curated set, the CLI turns extras off — expressed as a friendly list the generator inverts into the gateway's module whitelist.
 ---
 
 # Disable built-in modules
 
-Every Ignition gateway ships with a set of built-in IA modules — Vision, SFC, the PLC drivers, the JDBC drivers, and more. A demo often needs only a few of them, and turning the rest off slims the stack down. `ignition-stack` lets you name the modules to **disable** and does the rest.
+Every Ignition gateway ships with a set of built-in IA modules — Vision, SFC, the PLC drivers, the JDBC drivers, and more. A demo often needs only a few of them, and turning the rest off slims the stack down. `ignition-stack` lets you express which modules run and does the rest.
 
-## Turn modules off
+There are two ways in, depending on how you start a stack:
+
+- **The interactive wizard is opt-in.** It pre-selects a small curated set — Perspective, OPC-UA, SQL Bridge, the historian pair, Alarm Notification, Reporting, and the JDBC driver matching your database — and you add or remove from there. The common path is one keystroke: accept the lean default and move on.
+- **The CLI is opt-out.** `--disable-builtin <slug>` (repeatable) turns modules off on top of the full set; pass none and every built-in stays on, so non-interactive profile builds are unchanged.
+
+Both land on the same stored shape — a `disable_builtins` list the generator inverts into the gateway's module whitelist — so the two paths never diverge.
+
+## In the wizard
+
+The module step pre-checks the curated default set. Decline the **Customize the enabled gateway modules?** prompt to take it as-is, or accept it to open a checkbox with the default set already selected:
+
+- The default-enabled modules are checked; everything else is unchecked but one space-bar away.
+- The **JDBC driver follows your database choice** — pick Postgres and the PostgreSQL driver is pre-checked, pick MariaDB or MySQL and the MariaDB driver is (MySQL connects over the wire-compatible MariaDB driver; the catalog ships no MySQL-specific one). Mongo and "no database" pre-check no driver.
+
+Whatever you leave unselected becomes `disable_builtins`. The summary screen lists the modules that will actually run.
+
+## On the command line
 
 Pass `--disable-builtin <slug>` to `init`, once per module:
 
@@ -15,7 +31,7 @@ Pass `--disable-builtin <slug>` to `init`, once per module:
 ignition-stack init demo --disable-builtin vision --disable-builtin sfc
 ```
 
-The interactive wizard offers the same choice as an opt-in multi-select. In a [declarative config](./declarative-config.md), the same intent lives as `disable_builtins` on a gateway, so `init --dry-run` shows exactly what is turned off and a saved config rebuilds it with `--from-file`.
+In a [declarative config](./declarative-config.md), the same intent lives as `disable_builtins` on a gateway, so `init --dry-run` shows exactly what is turned off and a saved config rebuilds it with `--from-file`.
 
 Slugs are the friendly kebab names in the table below and tab-complete on the command line. An unknown slug is rejected up front — at config-construction time and at the wizard/CLI mutation path — with the full list of valid slugs, so a typo never silently slips through.
 
@@ -38,36 +54,38 @@ After boot, the gateway logs the modules it loads and shows them in its module l
 
 ## Module slugs
 
-| Slug | Module |
-| --- | --- |
-| `alarm-notification` | Alarm Notification |
-| `allen-bradley-driver` | Allen-Bradley Driver |
-| `bacnet-driver` | BACnet Driver |
-| `enterprise-administration` | Enterprise Administration |
-| `event-streams` | Event Streams |
-| `historian-core` | Historian Core |
-| `kafka-connector` | Kafka Connector |
-| `legacy-dnp3-driver` | Legacy DNP3 Driver |
-| `logix-driver` | Logix Driver |
-| `mariadb-jdbc-driver` | MariaDB JDBC Driver |
-| `micro800-driver` | Micro800 Driver |
-| `mitsubishi-driver` | Mitsubishi Driver |
-| `modbus-driver` | Modbus Driver |
-| `mssql-jdbc-driver` | MSSQL JDBC Driver |
-| `omron-driver` | Omron Driver |
-| `opc-ua` | OPC-UA |
-| `perspective` | Perspective |
-| `postgresql-jdbc-driver` | PostgreSQL JDBC Driver |
-| `reporting` | Reporting |
-| `sfc` | SFC |
-| `siemens-drivers` | Siemens Drivers |
-| `siemens-enhanced-driver` | Siemens Enhanced Driver |
-| `sms-notification` | SMS Notification |
-| `sql-bridge` | SQL Bridge |
-| `sql-historian` | SQL Historian |
-| `symbol-factory` | Symbol Factory |
-| `udp-and-tcp-drivers` | UDP and TCP Drivers |
-| `vision` | Vision |
-| `webdev` | WebDev |
+The **Wizard default** column shows what the wizard pre-checks: `on` for the curated default set, `DB-driven` for the JDBC drivers (the one matching your database is pre-checked, the others are not), and `—` for the rest (off by default, addable on request).
 
-This list is generated from `builtin_modules.yaml`, the pinned set for the default Ignition image. Disabling core modules other gateways depend on (for example `opc-ua`) can keep a gateway from reaching a working state; turn off only what the demo can do without.
+| Slug | Module | Wizard default |
+| --- | --- | --- |
+| `alarm-notification` | Alarm Notification | on |
+| `allen-bradley-driver` | Allen-Bradley Driver | — |
+| `bacnet-driver` | BACnet Driver | — |
+| `enterprise-administration` | Enterprise Administration | — |
+| `event-streams` | Event Streams | — |
+| `historian-core` | Historian Core | on |
+| `kafka-connector` | Kafka Connector | — |
+| `legacy-dnp3-driver` | Legacy DNP3 Driver | — |
+| `logix-driver` | Logix Driver | — |
+| `mariadb-jdbc-driver` | MariaDB JDBC Driver | DB-driven |
+| `micro800-driver` | Micro800 Driver | — |
+| `mitsubishi-driver` | Mitsubishi Driver | — |
+| `modbus-driver` | Modbus Driver | — |
+| `mssql-jdbc-driver` | MSSQL JDBC Driver | DB-driven |
+| `omron-driver` | Omron Driver | — |
+| `opc-ua` | OPC-UA | on |
+| `perspective` | Perspective | on |
+| `postgresql-jdbc-driver` | PostgreSQL JDBC Driver | DB-driven |
+| `reporting` | Reporting | on |
+| `sfc` | SFC | — |
+| `siemens-drivers` | Siemens Drivers | — |
+| `siemens-enhanced-driver` | Siemens Enhanced Driver | — |
+| `sms-notification` | SMS Notification | — |
+| `sql-bridge` | SQL Bridge | on |
+| `sql-historian` | SQL Historian | on |
+| `symbol-factory` | Symbol Factory | — |
+| `udp-and-tcp-drivers` | UDP and TCP Drivers | — |
+| `vision` | Vision | — |
+| `webdev` | WebDev | — |
+
+This list mirrors `builtin_modules.yaml`, the pinned set for the default Ignition image, where the `default_enabled` flag drives the wizard column. Disabling core modules other gateways depend on (for example `opc-ua`) can keep a gateway from reaching a working state; turn off only what the demo can do without.
