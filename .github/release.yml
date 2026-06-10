@@ -1,0 +1,41 @@
+# Release notes configuration
+# https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+#
+# Categorization is by PR *label*, not commit prefix. Label PRs (feature / bug /
+# documentation / chore ...) so they bucket correctly; anything unlabeled falls
+# through to "Other Changes".
+
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+    authors:
+      - dependabot
+
+  categories:
+    - title: "🚀 Features"
+      labels:
+        - enhancement
+        - feature
+
+    - title: "🐛 Bug Fixes"
+      labels:
+        - bug
+        - fix
+
+    - title: "📝 Documentation"
+      labels:
+        - documentation
+        - docs
+
+    - title: "🔧 Maintenance"
+      labels:
+        - chore
+        - ci
+        - test
+        - refactor
+        - dependencies
+
+    - title: "🔄 Other Changes"
+      labels:
+        - "*"
