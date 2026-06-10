@@ -6,10 +6,11 @@
     {
       "clientId": "ignition-gateway",
       "name": "Ignition Gateway",
-      "description": "OIDC client for Ignition gateway single sign-on. Copy this client's secret into the gateway IdP config (see POST-SETUP.md).",
+      "description": "OIDC client for Ignition gateway single sign-on. The client secret is pre-seeded into the gateway's identity-provider config; see the seeding matrix.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
+      "secret": "ignition-oidc-demo-secret",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "redirectUris": [
@@ -27,5 +28,25 @@
         "description": "Maps to the Administrator role in the Ignition gateway."
       }
     ]
-  }
+  },
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "email": "demo@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ignition-admin"
+      ]
+    }
+  ]
 }

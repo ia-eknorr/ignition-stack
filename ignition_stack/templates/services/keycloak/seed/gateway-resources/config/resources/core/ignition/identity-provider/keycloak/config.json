@@ -1,0 +1,57 @@
+{
+  "profile": {
+    "securityLevelRules": {
+      "nodes": []
+    },
+    "type": "oidc",
+    "userAttributeMapper": {
+      "id": {
+        "config": {
+          "attributePath": "sub"
+        },
+        "type": "direct"
+      },
+      "userName": {
+        "config": {
+          "attributePath": "preferred_username"
+        },
+        "type": "direct"
+      }
+    },
+    "userGrants": {
+      "id": {},
+      "username": {}
+    }
+  },
+  "settings": {
+    "allowedIdTokenSigningAlgorithms": [
+      "RS256"
+    ],
+    "authorizationEndpoint": "http://localhost:8081/realms/ignition/protocol/openid-connect/auth",
+    "clientId": "ignition-gateway",
+    "clientSecret": {
+      "data": {
+        "ciphertext": "z9ZjKLi8TbKfOKF212VIqt7C3xHB8sUAL6v3",
+        "encrypted_key": "7oJTyGBGvpzp0EDbNjI-onpqeYUXajhp7RJlhkrRGfof-TGi_wBtlw",
+        "iv": "DHRzRaun6PvCWHNY",
+        "protected": "eyJhbGciOiJBMjU2S1ciLCJlbmMiOiJBMjU2R0NNIiwiaWF0IjoxNzgxMTA1OTk2LCJ6aXAiOiJERUYifQ",
+        "tag": "5bg7QSkjq3K5EeTjbwWv6g"
+      },
+      "type": "Embedded"
+    },
+    "endSessionEndpoint": "http://localhost:8081/realms/ignition/protocol/openid-connect/logout",
+    "httpPostLogoutEnabled": false,
+    "jsonWebKeysEndpoint": "http://keycloak:8080/realms/ignition/protocol/openid-connect/certs",
+    "jsonWebKeysEndpointEnabled": true,
+    "providerId": "http://localhost:8081/realms/ignition",
+    "providerKeys": {
+      "keys": []
+    },
+    "scope": [
+      "openid"
+    ],
+    "tokenEndpoint": "http://keycloak:8080/realms/ignition/protocol/openid-connect/token",
+    "userInfoEndpoint": "http://keycloak:8080/realms/ignition/protocol/openid-connect/userinfo",
+    "userInfoRequestMethod": "POST"
+  }
+}

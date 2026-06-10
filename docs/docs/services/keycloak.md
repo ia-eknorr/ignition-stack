@@ -29,12 +29,17 @@ The generated `.env` ships these defaults. Change them before exposing the stack
 
 ## Seeding
 
-Keycloak's own realm can be seeded from `seed/service/`, but the gateway side cannot be fully file-seeded, because the OIDC client secret does not exist until Keycloak generates it at runtime. The gateway's identity-provider config is therefore left to post-setup.
+The Keycloak OIDC connection is seeded end to end, so a fresh gateway boots with single sign-on already configured and no manual step.
+
+Two halves cooperate:
+
+- **The realm** (`seed/service/import/ignition-realm.json`) ships the `ignition` realm with the `ignition-gateway` client carrying a **fixed demo client secret** (`ignition-oidc-demo-secret`), an `ignition-admin` realm role, and a demo user **`demo` / `demo`** holding that role. Keycloak imports it on first boot with `--import-realm`.
+- **The gateway side** (`seed/gateway-resources/`) overlays an OIDC identity provider at `config/resources/core/ignition/identity-provider/keycloak/config.json` (`profile.type=oidc`). The matching client secret rides **inside that file** as an embedded JWE blob, the same file-seeding the [seeding matrix](../reference/seeding-matrix.md) verifies for `db-connection`. Because the secret is embedded in the IdP config rather than in the shared `internal-secret-provider`, it never collides with the Postgres db-password secret on a gateway attached to both.
+
+To keep the OIDC issuer and redirect URLs consistent across the browser and the gateway's back-channel, the Keycloak container pins its frontend hostname (`KC_HOSTNAME=http://localhost:${KEYCLOAK_HTTP_PORT}`, with `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`). Browser-facing endpoints (authorize, logout, issuer) use the published `localhost:8081`; the gateway reaches the token, JWKS, and userinfo endpoints over the Docker network at `keycloak:8080`.
+
+This is a demo posture: the client secret is a fixed value shipped to every user, matching the bundled `admin` / `ignition` credentials. Rotate it in Keycloak and re-seed for any real deployment, and front Keycloak with HTTPS. If you change `KEYCLOAK_HTTP_PORT`, update the `authorizationEndpoint` / `endSessionEndpoint` / `providerId` URLs in the seeded `identity-provider/keycloak/config.json` to match.
 
 ## Post-setup
 
-After `docker compose up`, link the gateway to Keycloak:
-
-- **`identity-provider`**: Keycloak generates the OIDC client secret at runtime, so it cannot be file-seeded into the gateway's identity-provider config. Create (or open) the `ignition-gateway` client in Keycloak, copy its secret, and paste it into the gateway's identity-provider configuration.
-
-The generated `POST-SETUP.md` carries this step for the stack you produced.
+There is no manual configuration step. After `docker compose up`, open the gateway's **Config → Security → Identity Providers**, find the seeded `keycloak` provider, and run **Test Login** signing in as `demo` / `demo` to confirm the round-trip. The generated `POST-SETUP.md` frames this as a verification, not a procedure.

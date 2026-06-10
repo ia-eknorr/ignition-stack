@@ -1,0 +1,18 @@
+{
+  "scope": "A",
+  "description": "Pre-seeded OIDC identity provider for the bundled Keycloak service.",
+  "version": 1,
+  "restricted": false,
+  "overridable": true,
+  "files": [
+    "config.json"
+  ],
+  "attributes": {
+    "lastModification": {
+      "actor": "admin",
+      "timestamp": "2026-06-10T15:40:00Z"
+    },
+    "uuid": "47d0662c-ec2f-4303-847a-40691e970828",
+    "enabled": true
+  }
+}

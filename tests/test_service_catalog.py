@@ -16,6 +16,7 @@ Set ``UPDATE_GOLDENS=1`` to regenerate the golden snapshots this file checks.
 
 from __future__ import annotations
 
+import json
 import os
 from io import StringIO
 from pathlib import Path
@@ -27,7 +28,7 @@ from ignition_stack.catalog.loader import load_catalog
 from ignition_stack.compose.engine import render_compose
 from ignition_stack.compose.writer import write_project
 from ignition_stack.config.schema import DatabaseConfig, GatewayConfig, ProjectConfig
-from ignition_stack.services.loader import load_all_services, load_service
+from ignition_stack.services.loader import load_all_services, load_service, service_dir
 from ignition_stack.services.resolver import ResolveError, resolve
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
@@ -269,6 +270,84 @@ def test_gateway_resources_overlay_every_gateway(tmp_path: Path) -> None:
     for gw in ("frontend", "backend"):
         conn = tmp_path / "multi" / "services" / gw / "config" / "resources" / "core" / "ignition" / "database-connection" / "db" / "config.json"
         assert conn.is_file(), f"db-connection missing on gateway '{gw}'"
+
+
+# --------------------------------------------------------------------------- #
+# Keycloak OIDC seeding (Phase 5): IdP config + realm invariants
+# --------------------------------------------------------------------------- #
+
+_KC_IDP_REL = Path("config") / "resources" / "core" / "ignition" / "identity-provider" / "keycloak"
+_KC_DEMO_SECRET = "ignition-oidc-demo-secret"
+
+
+def test_keycloak_seeds_oidc_identity_provider_onto_gateway(tmp_path: Path) -> None:
+    """Keycloak overlays a pre-seeded OIDC identity-provider into the gateway tree."""
+    write_project(ProjectConfig(name="kc", services=["keycloak"]), tmp_path / "kc")
+    idp = tmp_path / "kc" / "services" / "ignition" / _KC_IDP_REL
+    assert (idp / "config.json").is_file()
+    assert (idp / "resource.json").is_file()
+
+
+def test_keycloak_idp_config_is_valid_oidc_with_embedded_secret(tmp_path: Path) -> None:
+    """The seeded IdP config is valid JSON, type=oidc, and carries an embedded JWE secret.
+
+    The client secret rides *inside* the IdP config as a JWE blob
+    (``clientSecret.type=Embedded``), the same file-seeding the matrix verifies
+    for db-connection. Keeping it embedded - not in the shared
+    internal-secret-provider - is what avoids colliding with the Postgres
+    db-password secret when a gateway attaches to both.
+    """
+    write_project(ProjectConfig(name="kc", services=["keycloak"]), tmp_path / "kc")
+    config = json.loads((tmp_path / "kc" / "services" / "ignition" / _KC_IDP_REL / "config.json").read_text())
+
+    assert config["profile"]["type"] == "oidc"
+    settings = config["settings"]
+    assert settings["clientId"] == "ignition-gateway"
+    # Embedded JWE secret: a ciphertext blob, not a plaintext value.
+    secret = settings["clientSecret"]
+    assert secret["type"] == "Embedded"
+    assert set(secret["data"]) >= {"ciphertext", "encrypted_key", "iv", "protected", "tag"}
+    # RS256 must be permitted or the gateway rejects Keycloak's signed ID token.
+    assert "RS256" in settings["allowedIdTokenSigningAlgorithms"]
+    # Issuer + browser-facing endpoints stay on the published Keycloak host;
+    # back-channel endpoints reach Keycloak over the Docker network.
+    assert settings["providerId"] == "http://localhost:8081/realms/ignition"
+    assert settings["authorizationEndpoint"].startswith("http://localhost:8081/")
+    assert settings["tokenEndpoint"].startswith("http://keycloak:8080/")
+
+
+def test_keycloak_does_not_clobber_postgres_secret(tmp_path: Path) -> None:
+    """A gateway attached to both keeps the Postgres db-password secret intact.
+
+    The Keycloak IdP secret is embedded in the IdP config, so the shared
+    internal-secret-provider config.json that Postgres seeds is left untouched -
+    no last-write-wins collision in the gateway-resources overlay.
+    """
+    write_project(ProjectConfig(name="both", services=["keycloak"]), tmp_path / "both")
+    base = tmp_path / "both" / "services" / "ignition" / "config" / "resources" / "core" / "ignition"
+    secret_provider = json.loads((base / "secret-provider" / "internal-secret-provider" / "config.json").read_text())
+    secrets = secret_provider["settings"]["secrets"]
+    # Postgres' db-password survives; Keycloak added no entry here.
+    assert "db-password" in secrets
+    assert _KC_DEMO_SECRET not in json.dumps(secret_provider)
+
+
+def test_keycloak_realm_pins_secret_demo_user_and_admin_role() -> None:
+    """The realm import carries the fixed client secret, a usable demo user, and the role."""
+    realm_file = service_dir("keycloak") / "seed" / "service" / "import" / "ignition-realm.json"
+    realm = json.loads(realm_file.read_text())
+
+    client = next(c for c in realm["clients"] if c["clientId"] == "ignition-gateway")
+    assert client["secret"] == _KC_DEMO_SECRET
+    assert client["publicClient"] is False
+
+    role_names = {r["name"] for r in realm["roles"]["realm"]}
+    assert "ignition-admin" in role_names
+
+    demo = next(u for u in realm["users"] if u["username"] == "demo")
+    assert "ignition-admin" in demo["realmRoles"]
+    pw = next(c for c in demo["credentials"] if c["type"] == "password")
+    assert pw["value"] == "demo" and pw["temporary"] is False
 
 
 # --------------------------------------------------------------------------- #

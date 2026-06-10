@@ -1,13 +1,25 @@
-## Finish the OIDC identity provider (Keycloak)
+## Verify the OIDC identity provider (Keycloak)
 
 {{ reason }}
 
 - **Open Keycloak:** http://localhost:{{ env_map['KEYCLOAK_HTTP_PORT'] }}
-  (admin console -> Clients -> `ignition-gateway` -> Credentials -> copy the client secret)
+  (admin console login: `{{ env_map['KEYCLOAK_ADMIN_USER'] }}` / `{{ env_map['KEYCLOAK_ADMIN_PASSWORD'] }}`)
 - **Open the gateway UI:** {{ gateway_url }}
-- **Navigate to:** Config -> Security -> Identity Providers, then add/edit the OIDC IdP.
-- **Copy from `.env`:**
-{%- for key, value in env_vars %}
-  - `{{ key }}` = `{{ value }}`
-{%- endfor %}
-- Paste the client secret you copied from Keycloak into the gateway IdP's **Client Secret** field.
+  (Config -> Security -> Identity Providers -> `keycloak` -> Test Login)
+
+The `keycloak` provider is pre-seeded as an OpenID Connect IdP wired to the
+bundled Keycloak realm. The realm ships a demo user **`demo` / `demo`** with the
+`ignition-admin` role. Run **Test Login** on the `keycloak` provider and sign in
+as that user; the test panel should return the user's claims (including the
+`ignition-admin` realm role). To make Keycloak the gateway login provider, set it
+on the relevant security level under Config -> Security.
+
+> **Demo credentials:** the OIDC client secret is a fixed demo value
+> (`ignition-oidc-demo-secret`) shipped in both the Keycloak realm and the
+> gateway IdP config, exactly like the demo `admin` / `ignition` passwords. The
+> Keycloak frontend hostname is pinned to `http://localhost:{{ env_map['KEYCLOAK_HTTP_PORT'] }}`
+> so OIDC issuer and redirect URLs stay consistent. For a real deployment,
+> rotate the client secret in Keycloak and re-seed it, and front Keycloak with
+> HTTPS. If you change `KEYCLOAK_HTTP_PORT` in `.env`, update the
+> `authorizationEndpoint` / `endSessionEndpoint` / `providerId` URLs in the
+> seeded `identity-provider/keycloak/config.json` to match.

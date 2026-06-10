@@ -15,7 +15,7 @@ env:
   KEYCLOAK_ADMIN_USER: admin
   KEYCLOAK_ADMIN_PASSWORD: admin
   KEYCLOAK_HTTP_PORT: "8081"
-seeds_gateway_resources: false
+seeds_gateway_resources: true
 # One IdP per stack: a second Keycloak would collide on its KEYCLOAK_* env keys
 # and the shared realm seed. Keycloak may run alongside an Edge gateway via SSO,
 # so it sets no never_on_edge placement (only its database does).
@@ -23,7 +23,10 @@ singleton: true
 post_setup:
   - connection: identity-provider
     reason: >-
-      Keycloak generates the OIDC client secret at runtime, so it cannot be
-      file-seeded into the gateway's identity-provider config. Create (or open)
-      the ignition-gateway client in Keycloak, copy its secret, and paste it
-      into the gateway's IdP configuration.
+      This stack seeds the Keycloak OIDC connection end to end: the realm ships a
+      fixed demo client secret, and the gateway's identity-provider config
+      embeds the matching secret as a JWE blob (the same file-seeding the
+      seeding matrix verifies for db-connection). The provider comes up
+      configured with no UI step. This is a verification, not a manual
+      procedure - confirm a Test Login succeeds, and reach for the steps below
+      only if it does not.

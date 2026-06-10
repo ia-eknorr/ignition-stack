@@ -51,14 +51,26 @@ def test_manual_secret_connection_carries_url_screen_and_env_var() -> None:
     assert "CHARIOT_ADMIN_PASSWORD" in body
 
 
-def test_identity_provider_step_names_screen_and_env_keys() -> None:
-    """Keycloak's OIDC secret is runtime-generated; its section guides the paste."""
+def test_identity_provider_step_is_a_verification_not_a_paste() -> None:
+    """Phase 5 seeds the OIDC connection; the section verifies, it does not configure.
+
+    The Keycloak OIDC IdP is now file-seeded end to end (fixed demo client secret
+    + embedded JWE), so the post-setup section mirrors the gateway-network /
+    redundancy verification notes: confirm a Test Login works, don't paste a
+    secret. It still carries the gateway + Keycloak deep-links and the demo
+    credentials a reader needs to run the check.
+    """
     body = generate_post_setup(_resolved(name="demo", services=["keycloak"]))
 
-    assert "Config -> Security -> Identity Providers" in body
-    # The Keycloak admin console deep-link plus its preset .env keys.
+    # Framed as a verification, not a manual paste of a runtime-generated secret.
+    assert "Verify the OIDC identity provider (Keycloak)" in body
+    assert "Test Login" in body
+    assert "verification, not a manual" in body
+    # The seeded demo user the reader signs in as.
+    assert "`demo` / `demo`" in body
+    # Deep-links: Keycloak admin console (port) + the gateway IdP screen.
     assert "http://localhost:8081" in body
-    assert "KEYCLOAK_HTTP_PORT" in body
+    assert "Identity Providers" in body
 
 
 def test_one_section_per_deferred_connection() -> None:
