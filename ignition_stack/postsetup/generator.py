@@ -167,10 +167,68 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         "gateways": gateways,
         "redundancy_pairs": _redundancy_pairs(config),
         "gan_links": _gan_links(config),
+        "mqtt": _mqtt_wiring(config),
         "env_vars": env_vars,
         "env_map": dict(env_vars),
         "proxy_path": config.reverse_proxy.path if config.reverse_proxy else "",
         "dropin_dir": "modules/dropin",
+    }
+
+
+def _mqtt_wiring(config: ProjectConfig) -> dict[str, object] | None:
+    """The resolved Sparkplug pipeline (broker + per-gateway roles), or None.
+
+    Reads the registry for the single ``mqtt-broker`` instance and its
+    ``wires.mqtt`` block, then splits the gateways attached to it by role so the
+    mqtt step can name which gateway runs Transmission (each an Edge Node with a
+    pre-filled Sparkplug identity: Group ID = project name, Edge Node ID = the
+    gateway name, per the issue #43 convention) versus Engine. Returns ``None``
+    when no broker is wired or no gateway carries an mqtt attachment (a broker
+    selected without the IIoT overlay), so the mqtt step falls back to its
+    generic single-gateway form.
+    """
+    catalog = load_all_services()
+    broker = next(
+        (inst for inst in config.service_instances if catalog[inst.service].kind == "mqtt-broker"),
+        None,
+    )
+    if broker is None:
+        return None
+    wires = catalog[broker.service].wires
+    mqtt = wires.mqtt if wires is not None else None
+    if mqtt is None:
+        return None
+
+    transmission: list[dict[str, object]] = []
+    engine: list[dict[str, object]] = []
+    for gw in config.gateways:
+        roles = {att.role for att in gw.services if att.instance == broker.id}
+        base = {
+            "name": gw.name,
+            "role": gw.role or gw.name,
+            "edition": gw.ignition_edition,
+            "url": f"http://localhost:{gw.http_port}",
+        }
+        if "mqtt-transmission" in roles:
+            transmission.append({**base, "group_id": config.name, "edge_node_id": gw.name})
+        if "mqtt-engine" in roles:
+            engine.append(base)
+
+    if not transmission and not engine:
+        return None
+    # The exact module slugs to fetch into modules/cache/, in the order a user
+    # would type them, so the step can hand over a copy-paste `modules download`.
+    module_slugs = []
+    if engine:
+        module_slugs.append(mqtt.engine_module)
+    if transmission:
+        module_slugs.append(mqtt.transmission_module)
+    return {
+        "broker": broker.id,
+        "broker_url": f"tcp://{broker.id}:{mqtt.port}",
+        "transmission_gateways": transmission,
+        "engine_gateways": engine,
+        "modules": " ".join(module_slugs),
     }
 
 

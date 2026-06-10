@@ -9,6 +9,7 @@ from ignition_stack.profiles.advisory import Advisory, spoke_advisory
 from ignition_stack.profiles.base import (
     Profile,
     ProfileOptions,
+    apply_iiot,
     build_profile,
     can_host_redundant_role,
     get_profile,
@@ -22,6 +23,7 @@ __all__ = [
     "Profile",
     "ProfileError",
     "ProfileOptions",
+    "apply_iiot",
     "build_profile",
     "can_host_redundant_role",
     "get_profile",

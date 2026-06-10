@@ -27,8 +27,8 @@ entries:
     vendor: cirrus-link
     ignition_versions: ["8.3.6"]
     module_identifier: com.cirruslink.mqtt.engine.gateway
-    download_url: https://inductiveautomation.com/downloads/third-party-modules/8.3.6/MQTT-Engine-signed.modl
-    sha256: UNPINNED
+    download_url: https://files.inductiveautomation.com/third-party/cirrus-link/5.0.3/MQTT-Engine-signed.modl
+    sha256: 0150a7b4ed2496fbdec89f253b985e9048d0f63f337e0ec93b380c3d2f3eaeb9
     install_path: /usr/local/bin/ignition/user-lib/modules/MQTT-Engine.modl
     requires_license_env: null
     requires_manual_download: false
@@ -38,8 +38,8 @@ entries:
     vendor: cirrus-link
     ignition_versions: ["8.3.6"]
     module_identifier: com.cirruslink.mqtt.transmission.gateway
-    download_url: https://inductiveautomation.com/downloads/third-party-modules/8.3.6/MQTT-Transmission-signed.modl
-    sha256: UNPINNED
+    download_url: https://files.inductiveautomation.com/third-party/cirrus-link/5.0.3/MQTT-Transmission-signed.modl
+    sha256: c33b7b53eb749e1ee9378772e54e2f5f5d27500c51bfaea916f29f19af1aa180
     install_path: /usr/local/bin/ignition/user-lib/modules/MQTT-Transmission.modl
     requires_license_env: null
     requires_manual_download: false
@@ -49,8 +49,8 @@ entries:
     vendor: cirrus-link
     ignition_versions: ["8.3.6"]
     module_identifier: com.cirruslink.mqtt.distributor.gateway
-    download_url: https://inductiveautomation.com/downloads/third-party-modules/8.3.6/MQTT-Distributor-signed.modl
-    sha256: UNPINNED
+    download_url: https://files.inductiveautomation.com/third-party/cirrus-link/5.0.3/MQTT-Distributor-signed.modl
+    sha256: a029e23afec7bbaed8a17576fe395737d14d8d5728e2e2e38a1cc347b4da8ae2
     install_path: /usr/local/bin/ignition/user-lib/modules/MQTT-Distributor.modl
     requires_license_env: null
     requires_manual_download: false
@@ -60,7 +60,7 @@ entries:
     vendor: oracle
     ignition_versions: ["8.3.6"]
     download_url: https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.1.0/mysql-connector-j-9.1.0.jar
-    sha256: UNPINNED
+    sha256: 8776e2ebc46072c9a47ea59d98298c4273bd9f16a7b26b5dfa4744535aa26c62
     install_path: /usr/local/bin/ignition/user-lib/jdbc/mysql-connector-j-9.1.0.jar
     requires_license_env: null
     requires_manual_download: false

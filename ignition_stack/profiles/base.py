@@ -28,7 +28,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ignition_stack.config import ProjectConfig, RedundancyConfig, ReverseProxyConfig
+from ignition_stack.config import (
+    GatewayConfig,
+    ProjectConfig,
+    RedundancyConfig,
+    ReverseProxyConfig,
+    ServiceAttachment,
+    ServiceInstance,
+)
 
 
 @dataclass(frozen=True)
@@ -93,6 +100,16 @@ class ProfileOptions:
     ``build_profile`` - the demo intent is "drop Vision/SFC everywhere", and
     per-gateway disabling stays a declarative-config-only feature. Slugs are
     validated against builtin_modules.yaml by ``GatewayConfig``."""
+
+    iiot: bool = False
+    """Overlay an MQTT/Sparkplug IIoT pipeline (a broker + Cirrus Link
+    Transmission/Engine) onto the stack. Off by default; ``build_profile`` calls
+    :func:`apply_iiot` when this is set, defaulting the broker to ``chariot``."""
+
+    iiot_broker: str | None = None
+    """MQTT broker slug the IIoT overlay wires to. ``None`` with ``iiot`` on
+    means the confirmed default ``chariot`` (Cirrus Link's own broker). Ignored
+    when ``iiot`` is False. Validated against the catalog by :func:`apply_iiot`."""
 
 
 class Profile(Protocol):
@@ -186,14 +203,9 @@ def mark_redundant(config: ProjectConfig, redundant_role: str | None) -> Project
     matches = _matching_gateways(config, redundant_role)
     if not matches:
         known = ", ".join(sorted({gw.role or gw.name for gw in config.gateways}))
-        raise ValueError(
-            f"no gateway matches redundant role '{redundant_role}'; available roles: {known}"
-        )
+        raise ValueError(f"no gateway matches redundant role '{redundant_role}'; available roles: {known}")
     if len(matches) > 1:
-        raise ValueError(
-            f"redundant role '{redundant_role}' matches {len(matches)} gateways; "
-            "redundancy pairs a single gateway, so name a singleton role"
-        )
+        raise ValueError(f"redundant role '{redundant_role}' matches {len(matches)} gateways; " "redundancy pairs a single gateway, so name a singleton role")
     master = matches[0]
     master.redundancy = RedundancyConfig(mode="master", peer=f"{master.name}-backup")
     return config
@@ -209,12 +221,12 @@ def build_profile(slug: str, name: str, options: ProfileOptions) -> ProjectConfi
     """
     config = get_profile(slug).build(name, options)
     config = mark_redundant(config, options.redundant_role)
-    return apply_disable_builtins(config, options.disable_builtins)
+    config = apply_disable_builtins(config, options.disable_builtins)
+    broker = (options.iiot_broker or _IIOT_DEFAULT_BROKER) if options.iiot else None
+    return apply_iiot(config, broker)
 
 
-def apply_disable_builtins(
-    config: ProjectConfig, disable_builtins: tuple[str, ...]
-) -> ProjectConfig:
+def apply_disable_builtins(config: ProjectConfig, disable_builtins: tuple[str, ...]) -> ProjectConfig:
     """Stamp ``disable_builtins`` onto every gateway in ``config``.
 
     Applied centrally (like :func:`mark_redundant`) so one rule serves every
@@ -234,3 +246,95 @@ def apply_disable_builtins(
     for gw in config.gateways:
         gw.disable_builtins = list(disable_builtins)
     return config
+
+
+# The confirmed default IIoT broker (Cirrus Link's own Chariot, the most
+# official pairing with their Transmission/Engine modules). Used when the
+# overlay is requested without an explicit broker slug.
+_IIOT_DEFAULT_BROKER = "chariot"
+
+# Gateway roles that run MQTT Transmission (edge-side: publish Sparkplug to the
+# broker) versus MQTT Engine (central: subscribe and aggregate). A
+# standalone/mcp-n8n shape has neither role, so its single gateway runs both for
+# a self-contained demo loop through the broker.
+_TRANSMISSION_ROLES = frozenset({"spoke", "frontend"})
+_ENGINE_ROLES = frozenset({"hub", "backend"})
+
+
+def apply_iiot(config: ProjectConfig, broker: str | None) -> ProjectConfig:
+    """Overlay an MQTT/Sparkplug IIoT pipeline onto ``config``.
+
+    Returns ``config`` unchanged when ``broker`` is None. Otherwise it adds the
+    broker as a stack-level :class:`ServiceInstance` (singleton, enforced by the
+    resolver) and wires each gateway by role, using the **module slugs the broker
+    manifest's ``wires.mqtt`` block names** (never hardcoded):
+
+    - ``spoke`` / ``frontend`` gateways get an ``mqtt-transmission`` attachment
+      plus the Transmission module (they publish Sparkplug to the broker);
+    - ``hub`` / ``backend`` gateways get an ``mqtt-engine`` attachment plus the
+      Engine module (they subscribe and aggregate);
+    - if NO gateway carries any of those roles (standalone / mcp-n8n shapes), the
+      single/first gateway gets BOTH attachments + both modules - a self-contained
+      demo loop through the broker.
+
+    Brokers are not ``never_on_edge``, so an Edge spoke attaching with role
+    ``mqtt-transmission`` is correct and expected. Idempotent: guards on
+    ``(instance, role)`` attachment pairs and on module-already-present, so
+    ``apply_iiot(apply_iiot(c)) == apply_iiot(c)``. The expansion of a redundancy
+    master happens later in :func:`~ignition_stack.services.resolver.resolve`,
+    which copies the master's attachments + modules onto the backup, so a
+    redundant Engine gateway ends up with the Engine module on both nodes.
+
+    Raises ``ValueError`` (surfaced by the CLI as exit code 2) when the broker
+    slug is unknown, is not an ``mqtt-broker``, or carries no ``wires.mqtt`` block.
+    """
+    if broker is None:
+        return config
+
+    from ignition_stack.services.loader import load_all_services
+
+    catalog = load_all_services()
+    manifest = catalog.get(broker)
+    if manifest is None:
+        brokers = ", ".join(sorted(slug for slug, m in catalog.items() if m.kind == "mqtt-broker"))
+        raise ValueError(f"unknown iiot broker '{broker}'; known mqtt brokers: {brokers}")
+    if manifest.kind != "mqtt-broker":
+        raise ValueError(f"iiot broker '{broker}' is a '{manifest.kind}' service, not an mqtt-broker")
+    if manifest.wires is None or manifest.wires.mqtt is None:
+        raise ValueError(f"mqtt broker '{broker}' declares no wires.mqtt block, so the IIoT overlay cannot find its Transmission/Engine module slugs")
+    mqtt = manifest.wires.mqtt
+
+    # Add the broker instance once (id == slug); the resolver's singleton check
+    # catches an accidental duplicate broker elsewhere in the registry.
+    if not any(inst.id == broker for inst in config.service_instances):
+        config.service_instances.append(ServiceInstance(id=broker, service=broker))
+
+    transmission_gws = [gw for gw in config.gateways if gw.role in _TRANSMISSION_ROLES]
+    engine_gws = [gw for gw in config.gateways if gw.role in _ENGINE_ROLES]
+
+    if not transmission_gws and not engine_gws:
+        # No transmission/engine roles in this topology: run the whole loop on
+        # the single/first gateway so the demo is self-contained.
+        only = config.gateways[0]
+        _wire_iiot_gateway(only, broker, "mqtt-transmission", mqtt.transmission_module)
+        _wire_iiot_gateway(only, broker, "mqtt-engine", mqtt.engine_module)
+    else:
+        for gw in transmission_gws:
+            _wire_iiot_gateway(gw, broker, "mqtt-transmission", mqtt.transmission_module)
+        for gw in engine_gws:
+            _wire_iiot_gateway(gw, broker, "mqtt-engine", mqtt.engine_module)
+    return config
+
+
+def _wire_iiot_gateway(gw: GatewayConfig, instance_id: str, role: str, module: str) -> None:
+    """Attach ``gw`` to the broker with ``role`` and add ``module`` to it.
+
+    Role-aware guard (not the phase-1 instance-only ``_attach_all_gateways``): a
+    self-loop gateway holds two attachments to the same broker instance, one per
+    role, so the guard must key on the ``(instance, role)`` pair. Module presence
+    is guarded separately so a second pass adds nothing.
+    """
+    if not any(att.instance == instance_id and att.role == role for att in gw.services):
+        gw.services.append(ServiceAttachment(instance=instance_id, role=role))
+    if module not in gw.modules:
+        gw.modules.append(module)

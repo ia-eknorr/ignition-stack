@@ -17,6 +17,7 @@ from pathlib import Path
 from ignition_stack.compose import write_project
 from ignition_stack.config import ProjectConfig
 from ignition_stack.postsetup import generate_post_setup
+from ignition_stack.profiles import ProfileOptions, build_profile
 from ignition_stack.services.resolver import resolve
 
 
@@ -62,9 +63,7 @@ def test_identity_provider_step_names_screen_and_env_keys() -> None:
 
 def test_one_section_per_deferred_connection() -> None:
     """Each service with a post_setup item contributes exactly one heading."""
-    body = generate_post_setup(
-        _resolved(name="demo", services=["chariot", "opcua-sim", "modbus-sim", "kafka"])
-    )
+    body = generate_post_setup(_resolved(name="demo", services=["chariot", "opcua-sim", "modbus-sim", "kafka"]))
     # Four services, each declaring one deferred connection -> four sections.
     assert body.count("\n## ") == 4
 
@@ -82,3 +81,52 @@ def test_writer_writes_no_manual_steps_for_default_stack(tmp_path: Path) -> None
     body = (tmp_path / "demo" / "POST-SETUP.md").read_text(encoding="utf-8")
     assert "no manual steps required" in body.lower()
     assert b"\r" not in (tmp_path / "demo" / "POST-SETUP.md").read_bytes()
+
+
+# --------------------------------------------------------------------------- #
+# IIoT overlay: gateway-aware, pre-filled MQTT steps (issue #43 Phase 3)
+# --------------------------------------------------------------------------- #
+
+
+def _iiot_post_setup(profile: str, name: str, **opts: object) -> str:
+    config = build_profile(profile, name, ProfileOptions(iiot=True, **opts))  # type: ignore[arg-type]
+    return generate_post_setup(resolve(config))
+
+
+def test_iiot_hub_and_spoke_names_engine_hub_and_transmission_spokes() -> None:
+    """Transmission steps name each spoke with prefilled Sparkplug identity;
+    the Engine step names the hub. Broker endpoint comes from wires.mqtt."""
+    body = _iiot_post_setup("hub-and-spoke", "plant", spokes=2)
+
+    # Engine on the hub.
+    assert "**MQTT Engine**" in body
+    assert "On **hub**" in body
+    assert "spBv1.0" in body  # Engine subscribes to all groups by default.
+
+    # Transmission on each spoke, with Group ID = project, Edge Node ID = gw name.
+    assert "**MQTT Transmission**" in body
+    for spoke in ("spoke-1", "spoke-2"):
+        assert f"On **{spoke}**" in body
+        assert f"Edge Node ID = `{spoke}`" in body
+    assert "Group ID = `plant`" in body
+
+    # Broker endpoint from wires.mqtt (tcp://<broker-id>:<port>).
+    assert "tcp://chariot:1883" in body
+    # The trial note is present so users know no license is required.
+    assert "trial" in body.lower()
+
+
+def test_iiot_scaleout_engine_on_backend_transmission_on_frontends() -> None:
+    body = _iiot_post_setup("scaleout", "edge", frontends=2)
+    assert "On **backend**" in body
+    for front in ("frontend-1", "frontend-2"):
+        assert f"On **{front}**" in body
+        assert f"Edge Node ID = `{front}`" in body
+
+
+def test_iiot_standalone_single_gateway_runs_both_roles() -> None:
+    body = _iiot_post_setup("standalone", "solo")
+    assert "**MQTT Engine**" in body
+    assert "**MQTT Transmission**" in body
+    assert "On **gateway**" in body
+    assert "Edge Node ID = `gateway`" in body

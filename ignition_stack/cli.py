@@ -24,6 +24,7 @@ from ignition_stack.commands.modules import modules_app
 from ignition_stack.completion import (
     complete_disable_builtin,
     complete_edge_role,
+    complete_iiot_broker,
     complete_output_format,
     complete_profile,
     complete_redundant_role,
@@ -203,6 +204,26 @@ def init(
         ),
         autocompletion=complete_disable_builtin,
     ),
+    iiot: bool = typer.Option(
+        False,
+        "--iiot/--no-iiot",
+        help=(
+            "Overlay an MQTT/Sparkplug IIoT pipeline: add a broker and wire the "
+            "Cirrus Link Transmission/Engine modules across the gateways by role "
+            "(spokes/frontends transmit, hub/backend run Engine; a single gateway "
+            "runs both). Defaults the broker to 'chariot'."
+        ),
+    ),
+    iiot_broker: str | None = typer.Option(
+        None,
+        "--iiot-broker",
+        help=(
+            "MQTT broker slug the IIoT overlay wires to (implies --iiot). Must be "
+            "a catalog 'mqtt-broker' kind (e.g. 'chariot', 'emqx', 'hivemq'). "
+            "Defaults to 'chariot' when --iiot is given without this flag."
+        ),
+        autocompletion=complete_iiot_broker,
+    ),
     from_file: Path | None = typer.Option(  # noqa: B008 - Typer pattern
         None,
         "--from-file",
@@ -272,6 +293,8 @@ def init(
             proxy_path=proxy_path,
             redundant=redundant,
             disable_builtin=disable_builtin,
+            iiot=iiot,
+            iiot_broker=iiot_broker,
         )
 
     if dry_run:
@@ -349,6 +372,8 @@ def _build_from_profile(
     proxy_path: str,
     redundant: str | None,
     disable_builtin: list[str],
+    iiot: bool,
+    iiot_broker: str | None,
 ) -> ProjectConfig:
     """Materialize a config from the named profile + CLI flags, or exit cleanly."""
     try:
@@ -358,6 +383,9 @@ def _build_from_profile(
         raise typer.Exit(code=2) from exc
 
     proxy = ReverseProxyConfig(kind=reverse_proxy, path=proxy_path) if reverse_proxy else None
+    # --iiot-broker implies --iiot, so naming a broker is enough to turn the
+    # overlay on; build_profile defaults the slug to 'chariot' when iiot is on
+    # without an explicit broker.
     options = ProfileOptions(
         spokes=spokes,
         frontends=frontends,
@@ -367,6 +395,8 @@ def _build_from_profile(
         reverse_proxy=proxy,
         redundant_role=redundant,
         disable_builtins=tuple(disable_builtin),
+        iiot=iiot or iiot_broker is not None,
+        iiot_broker=iiot_broker,
     )
     try:
         config = build_profile(profile, name, options)

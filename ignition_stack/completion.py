@@ -44,6 +44,22 @@ def complete_reverse_proxy(incomplete: str) -> list[str]:
     return [kind for kind in REVERSE_PROXY_VALUES if kind.startswith(incomplete)]
 
 
+def complete_iiot_broker(incomplete: str) -> list[tuple[str, str]]:
+    """MQTT broker slugs (with summary) the IIoT overlay can wire to.
+
+    Reads the bundled service catalog and offers only ``mqtt-broker`` kinds, the
+    slugs ``--iiot-broker`` accepts. Degrades to no suggestions on any error so a
+    TAB never breaks the shell line.
+    """
+    try:
+        from ignition_stack.services.loader import load_all_services
+
+        catalog = load_all_services()
+    except Exception:
+        return []
+    return [(slug, m.summary) for slug, m in sorted(catalog.items()) if m.kind == "mqtt-broker" and slug.startswith(incomplete)]
+
+
 # Roles `init --redundant` can pair. Only the singleton workhorse roles are
 # eligible (a scaleout 'backend', a hub-and-spoke 'hub', a standalone
 # 'gateway'); replicated 'frontend'/'spoke' tiers are rejected by the profile

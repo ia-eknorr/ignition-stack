@@ -1,7 +1,50 @@
 ## Link the gateway to the MQTT broker ({{ service }})
 
 {{ reason }}
+{% if mqtt and (mqtt.transmission_gateways or mqtt.engine_gateways) %}
+This stack wires a Sparkplug pipeline through the **{{ mqtt.broker }}** broker.
+Until config seeding lands, every MQTT connection is set by hand - the steps
+below are pre-filled with this stack's identities so you only have to copy them
+in. The broker endpoint is `{{ mqtt.broker_url }}` (reachable from each gateway
+container by the broker's compose service name).
 
+> The Cirrus Link Transmission/Engine modules run a ~2-hour trial that resets on
+> every gateway restart, so this loop demos with no license.
+
+The Cirrus modules install from the project's `modules/cache/`, which starts
+empty. Populate it once before the modules will load, then bring the stack up:
+
+```sh
+ignition-stack modules download {{ mqtt.modules }}
+docker compose up -d
+```
+
+The bootstrap copies whatever is in `modules/cache/` into each gateway on first
+boot; if the modules are missing, fill the cache and re-run `docker compose up -d`.
+{% if mqtt.engine_gateways %}
+**MQTT Engine** - subscribes to the broker and aggregates; typically zero config
+beyond the server entry:
+{% for gw in mqtt.engine_gateways %}
+- On **{{ gw.name }}** ({{ gw.url }}): Config -> MQTT Engine -> Settings ->
+  Servers, add a server pointing at `{{ mqtt.broker_url }}`. Engine subscribes to
+  all Sparkplug groups on `spBv1.0` by default, so once the server connects no
+  further setup is needed.
+{% endfor %}
+{% endif %}
+{% if mqtt.transmission_gateways %}
+**MQTT Transmission** - publishes Sparkplug; one Edge Node per gateway:
+{% for gw in mqtt.transmission_gateways %}
+- On **{{ gw.name }}** ({{ gw.url }}): Config -> MQTT Transmission -> Settings ->
+  Servers, add a server pointing at `{{ mqtt.broker_url }}`. Then set this node's
+  Sparkplug identity - **Group ID = `{{ gw.group_id }}`** and
+  **Edge Node ID = `{{ gw.edge_node_id }}`**.
+{% endfor %}
+{% endif %}
+**Copy from `.env`** (broker credentials/ports):
+{% for key, value in env_vars %}
+- `{{ key }}` = `{{ value }}`
+{%- endfor %}
+{% else %}
 - **Open the gateway UI:** {{ gateway_url }}
 - **Navigate to:** Config -> MQTT Engine -> Servers -> Settings (use MQTT Transmission
   on an edge gateway instead), then add an MQTT server pointing at `{{ service }}`.
@@ -9,3 +52,4 @@
 {%- for key, value in env_vars %}
   - `{{ key }}` = `{{ value }}`
 {%- endfor %}
+{% endif %}
