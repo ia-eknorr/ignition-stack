@@ -27,6 +27,7 @@ A generated project is plain Docker Compose with no hidden state. The CLI's job 
 - **[Concepts](./concepts/how-generation-works.md)** explain how generation, the capability resolver, the configuration record, and seeding work.
 - **[Guides](./guides/reset-and-reshape.md)** cover the day-to-day tasks: resetting, reshaping, and tearing a stack down.
 - **[Reference](./reference/cli.md)** is the lookup layer: every CLI command and the Ignition 8.3 seeding matrix.
+- **[Changelog](https://github.com/ia-eknorr/ignition-stack/blob/main/CHANGELOG.md)** is what's new in each release.
 
 ## Every stack is reshapeable
 

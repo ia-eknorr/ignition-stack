@@ -131,6 +131,10 @@ const config: Config = {
           title: "More",
           items: [
             { label: "GitHub", href: "https://github.com/ia-eknorr/ignition-stack" },
+            {
+              label: "Changelog",
+              href: "https://github.com/ia-eknorr/ignition-stack/blob/main/CHANGELOG.md",
+            },
           ],
         },
       ],
