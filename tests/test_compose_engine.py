@@ -30,25 +30,33 @@ from ruamel.yaml import YAML
 from ignition_stack.catalog.loader import load_catalog
 from ignition_stack.compose.engine import render_compose
 from ignition_stack.config.schema import DatabaseConfig, GatewayConfig, ProjectConfig
+from ignition_stack.services.resolver import resolve
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
 
 def _scaleout_config() -> ProjectConfig:
-    """Fixed multi-gateway config exercised by every Phase 4 acceptance test."""
-    return ProjectConfig(
-        name="scaleout",
-        network_split=True,
-        gateways=[
-            GatewayConfig(
-                name="frontend",
-                role="frontend",
-                ignition_edition="edge",
-                http_port=9088,
-                modules=["mqtt-engine"],
-            ),
-            GatewayConfig(name="backend", http_port=9089),
-        ],
+    """Fixed multi-gateway config exercised by every Phase 4 acceptance test.
+
+    Resolved because the engine renders from the resolved service registry
+    (issue #43 Phase 1): the legacy ``database``/``services`` fields are lowered
+    into ``service_instances`` by :func:`resolve`, which the engine then reads.
+    """
+    return resolve(
+        ProjectConfig(
+            name="scaleout",
+            network_split=True,
+            gateways=[
+                GatewayConfig(
+                    name="frontend",
+                    role="frontend",
+                    ignition_edition="edge",
+                    http_port=9088,
+                    modules=["mqtt-engine"],
+                ),
+                GatewayConfig(name="backend", http_port=9089),
+            ],
+        )
     )
 
 
@@ -76,11 +84,7 @@ def _check_or_update_golden(rel_path: str, actual: str) -> None:
                 n=2,
             )
         )
-        pytest.fail(
-            f"compose output diverges from golden '{rel_path}'.\n"
-            "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n"
-            f"{diff}"
-        )
+        pytest.fail(f"compose output diverges from golden '{rel_path}'.\n" "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n" f"{diff}")
 
 
 def _parse_yaml(text: str) -> object:
@@ -91,7 +95,7 @@ def _parse_yaml(text: str) -> object:
 
 def test_standalone_default_matches_phase2_golden() -> None:
     """The Phase 2 walking skeleton must remain byte-stable through the engine."""
-    rendered = render_compose(ProjectConfig(name="demo"))
+    rendered = render_compose(resolve(ProjectConfig(name="demo")))
     _check_or_update_golden("standalone-postgres/docker-compose.yaml", rendered)
 
 
@@ -312,9 +316,7 @@ def test_bootstrap_script_drops_cached_modules_into_user_lib() -> None:
 
     # Read the vendored bootstrap script directly so we assert against the
     # source-of-truth artifact, not an indirect rendering.
-    script = _P(
-        "ignition_stack/templates/standalone-postgres/scripts/docker-bootstrap.sh"
-    ).read_text(encoding="utf-8")
+    script = _P("ignition_stack/templates/standalone-postgres/scripts/docker-bootstrap.sh").read_text(encoding="utf-8")
     assert "/modules-cache" in script, "bootstrap must check for /modules-cache mount"
     assert "user-lib/modules" in script, "bootstrap must drop modules into user-lib/modules"
 

@@ -29,7 +29,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 from ignition_stack.catalog.loader import CatalogLoadError, load_catalog
 from ignition_stack.catalog.schema import Catalog
 from ignition_stack.compose.engine import render_compose
-from ignition_stack.config.schema import ProjectConfig
+from ignition_stack.config.schema import ProjectConfig, ServiceInstance
 from ignition_stack.lifecycle.record import write_record
 from ignition_stack.postsetup import generate_post_setup
 from ignition_stack.services.loader import load_all_services, service_dir
@@ -66,9 +66,7 @@ def write_project(
     """
     target_dir = Path(target_dir).resolve()
     if not overwrite and target_dir.exists() and any(target_dir.iterdir()):
-        raise FileExistsError(
-            f"target directory '{target_dir}' is not empty; refusing to overwrite"
-        )
+        raise FileExistsError(f"target directory '{target_dir}' is not empty; refusing to overwrite")
     target_dir.mkdir(parents=True, exist_ok=True)
 
     config = resolve(config)
@@ -105,38 +103,49 @@ def _copy_service_seeds(config: ProjectConfig, target_dir: Path) -> list[Path]:
     same names the compose fragments mount from.
     """
     written: list[Path] = []
-    for src_dir, dest_name in _seed_sources(config):
+    for src_dir, inst in _seed_sources(config):
         seed_service = src_dir / "seed" / "service"
         if not seed_service.is_dir():
             continue
         for rel, content, executable in _walk_template(seed_service):
-            written.append(
-                _write_static(target_dir, f"services/{dest_name}/{rel}", content, executable)
-            )
+            written.append(_write_static(target_dir, f"services/{inst.id}/{rel}", content, executable))
     return written
 
 
 def _overlay_gateway_resources(config: ProjectConfig, target_dir: Path) -> list[Path]:
-    """Overlay every seeding service's ``seed/gateway-resources/`` onto gateways.
+    """Overlay each seeding service's ``seed/gateway-resources/`` onto gateways.
 
     Per the Phase-1 matrix, file-seedable connections (db-connection, the
-    internal-secret-provider that holds its password, ...) are dropped into
-    each gateway's ``config/resources/`` tree, which the bootstrap copies into
-    the gateway data volume on first boot. The same resource set lands on every
-    gateway so each can reach the shared service.
+    internal-secret-provider that holds its password, ...) are dropped into the
+    ``config/resources/`` tree of the gateways that **attach** to the service,
+    which the bootstrap copies into the gateway data volume on first boot.
+    Attachment-driven: a gateway only receives a service's resources if it has a
+    :class:`ServiceAttachment` to that instance. Lowered configs attach every
+    gateway to the shared services, so the same resource set still lands on
+    every gateway - byte-identical to the pre-registry fan-to-all.
     """
     written: list[Path] = []
-    gw_dirs = [gw.name for gw in config.gateways] if config.is_multi_gateway else ["ignition"]
-    for src_dir, _ in _seed_sources(config):
+    for src_dir, inst in _seed_sources(config):
         resources_tree = src_dir / "seed" / "gateway-resources"
         if not resources_tree.is_dir():
             continue
         for rel, content, executable in _walk_template(resources_tree):
-            for gw_dir in gw_dirs:
-                written.append(
-                    _write_static(target_dir, f"services/{gw_dir}/{rel}", content, executable)
-                )
+            for gw_dir in _attached_gateway_dirs(config, inst.id):
+                written.append(_write_static(target_dir, f"services/{gw_dir}/{rel}", content, executable))
     return written
+
+
+def _attached_gateway_dirs(config: ProjectConfig, instance_id: str) -> list[str]:
+    """Template-source dir names of gateways attached to ``instance_id``.
+
+    Single-gateway stacks keep the Phase-2 ``services/ignition/`` layout (the
+    one gateway's dir is always ``ignition`` regardless of its name); multi
+    gateway stacks use each attached gateway's own name.
+    """
+    attached = [gw for gw in config.gateways if any(a.instance == instance_id for a in gw.services)]
+    if not config.is_multi_gateway:
+        return ["ignition"] if attached else []
+    return [gw.name for gw in attached]
 
 
 def _write_redundancy_seeds(config: ProjectConfig, target_dir: Path) -> list[Path]:
@@ -181,19 +190,15 @@ def _redundancy_jinja_env() -> Environment:
     )
 
 
-def _seed_sources(config: ProjectConfig) -> list[tuple[object, str]]:
-    """(service-catalog dir, on-disk destination name) for the DB + each service.
+def _seed_sources(config: ProjectConfig) -> list[tuple[Traversable, ServiceInstance]]:
+    """(service-catalog dir, registry instance) for every instance in the stack.
 
     Only services whose manifest sets ``seeds_gateway_resources`` contribute
     gateway resources, but ``seed/service/`` is copied for any service that
-    ships one regardless.
+    ships one regardless. The catalog dir is keyed by the instance's service
+    slug (db kind for databases, slug for everyone else).
     """
-    sources: list[tuple[object, str]] = []
-    if config.database is not None:
-        sources.append((service_dir(config.database.kind), config.database.name))
-    for svc in config.services:
-        sources.append((service_dir(svc), svc))
-    return sources
+    return [(service_dir(inst.service), inst) for inst in config.service_instances]
 
 
 def _ensure_modules_cache_dir(config: ProjectConfig, target_dir: Path) -> None:
@@ -268,9 +273,7 @@ def _maybe_load_catalog(config: ProjectConfig) -> Catalog | None:
     try:
         return load_catalog()
     except CatalogLoadError as exc:
-        raise RuntimeError(
-            "modules referenced in project config but modules.yaml could not be loaded"
-        ) from exc
+        raise RuntimeError("modules referenced in project config but modules.yaml could not be loaded") from exc
 
 
 def _write_env(config: ProjectConfig, target_dir: Path) -> Path:
@@ -303,29 +306,29 @@ def _render_env(config: ProjectConfig) -> str:
         for gw in config.gateways:
             lines.append(f"{gw.env_prefix}_HTTP_PORT={gw.http_port}")
 
+    db = config.database_instance()
     lines.append(f"IGNITION_IMAGE={config.ignition_image}")
-    if config.database is not None:
-        lines.append(f"{config.database.image_env}={config.database.image}")
+    if db is not None:
+        lines.append(f"{db.image_env}={db.image}")
     lines += [
         f"ADMIN_USERNAME={config.admin_username}",
         f"ADMIN_PASSWORD={config.admin_password}",
     ]
-    if config.database is not None:
-        db = config.database
+    if db is not None:
         lines += [
             f"DB_USER={db.user}",
             f"DB_PASSWORD={db.password}",
-            f"DB_HOST={db.name}",
+            f"DB_HOST={db.id}",
         ]
-        if db.extra_databases and db.kind in {"postgres", "mysql", "mariadb"}:
+        if db.extra_databases and db.service in {"postgres", "mysql", "mariadb"}:
             lines.append(f"EXTRA_DATABASES={','.join(db.extra_databases)}")
 
     catalog = load_all_services()
-    for svc in sorted(config.services):
-        manifest = catalog[svc]
-        lines.append(f"{manifest.image_env}={manifest.image}")
+    for inst in sorted(config.non_database_instances(), key=lambda i: i.id):
+        manifest = catalog[inst.service]
+        lines.append(f"{manifest.image_env}={inst.image}")
         for key, value in manifest.env.items():
-            lines.append(f"{key}={value}")
+            lines.append(f"{key}={inst.env.get(key, value)}")
 
     lines.append(f"TZ={config.timezone}")
     return "\n".join(lines) + "\n"

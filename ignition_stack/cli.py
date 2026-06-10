@@ -111,8 +111,7 @@ def _notify_update_available() -> None:
         return
     current, latest = result
     console.print(
-        f"[dim]update available[/dim] [yellow]{current}[/yellow] -> "
-        f"[green]{latest}[/green] · run: [cyan]{detect_upgrade_command()}[/cyan]",
+        f"[dim]update available[/dim] [yellow]{current}[/yellow] -> " f"[green]{latest}[/green] · run: [cyan]{detect_upgrade_command()}[/cyan]",
         highlight=False,
     )
 
@@ -153,18 +152,12 @@ def init(
     network_split: bool | None = typer.Option(
         None,
         "--network-split/--no-network-split",
-        help=(
-            "Force the frontend/backend network split on or off. Default follows "
-            "the profile (scaleout splits, hub-and-spoke does not)."
-        ),
+        help=("Force the frontend/backend network split on or off. Default follows " "the profile (scaleout splits, hub-and-spoke does not)."),
     ),
     reverse_proxy: str | None = typer.Option(
         None,
         "--reverse-proxy",
-        help=(
-            "Scaffold a reverse proxy of the given kind ('traefik'). Lays down a "
-            "README + POST-SETUP entry at --proxy-path. Omit for plain host-port mapping."
-        ),
+        help=("Scaffold a reverse proxy of the given kind ('traefik'). Lays down a " "README + POST-SETUP entry at --proxy-path. Omit for plain host-port mapping."),
         autocompletion=complete_reverse_proxy,
     ),
     proxy_path: str = typer.Option(
@@ -300,19 +293,12 @@ def init(
     console.print("Next steps:")
     console.print(f"  cd {target}")
     console.print("  docker compose up -d")
-    console.print(
-        f"  open http://localhost:{config.gateways[0].http_port}  (admin / {config.admin_password})"
-    )
+    console.print(f"  open http://localhost:{config.gateways[0].http_port}  (admin / {config.admin_password})")
     console.print()
-    console.print(
-        f"  config recorded in {LIFECYCLE_DIR}/ - run `ignition-stack reset` to "
-        "regenerate or `switch-profile <name>` to reshape this stack."
-    )
+    console.print(f"  config recorded in {LIFECYCLE_DIR}/ - run `ignition-stack reset` to " "regenerate or `switch-profile <name>` to reshape this stack.")
 
 
-def _validate_init_flags(
-    *, profile: str | None, from_file: Path | None, dry_run: bool, fmt: str | None
-) -> None:
+def _validate_init_flags(*, profile: str | None, from_file: Path | None, dry_run: bool, fmt: str | None) -> None:
     """Enforce the mutual-exclusion + flag-applicability rules, or exit code 2.
 
     ``--from-file`` already fully specifies the topology, so combining it with
@@ -322,18 +308,13 @@ def _validate_init_flags(
     supported formats here so a bad ``--output-format`` fails before any build.
     """
     if from_file is not None and profile is not None:
-        console.print(
-            "[red]error[/red]: --from-file cannot be combined with --profile; a "
-            "config file already specifies the full topology."
-        )
+        console.print("[red]error[/red]: --from-file cannot be combined with --profile; a " "config file already specifies the full topology.")
         raise typer.Exit(code=2)
     if fmt is not None and not dry_run:
         console.print("[red]error[/red]: --output-format only applies with --dry-run.")
         raise typer.Exit(code=2)
     if fmt is not None and fmt not in {"yaml", "json"}:
-        console.print(
-            f"[red]error[/red]: unsupported --output-format '{fmt}'; use 'yaml' or 'json'."
-        )
+        console.print(f"[red]error[/red]: unsupported --output-format '{fmt}'; use 'yaml' or 'json'.")
         raise typer.Exit(code=2)
 
 
@@ -474,9 +455,7 @@ def switch_profile(
     # 'gateway'), which the target profile may not have. Building its base
     # topology lets us check before build_profile's mark_redundant would reject
     # it - drop the intent with an advisory rather than failing the reshape.
-    if options.redundant_role is not None and not can_host_redundant_role(
-        get_profile(profile).build(current.name, options), options.redundant_role
-    ):
+    if options.redundant_role is not None and not can_host_redundant_role(get_profile(profile).build(current.name, options), options.redundant_role):
         console.print(
             f"[yellow]note[/yellow]: redundancy on '{options.redundant_role}' was not "
             f"carried to {profile} (no matching gateway); re-apply with --redundant "
@@ -515,11 +494,7 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
     # by the resolver), so recover the role/name of whichever gateway is the
     # master and let the new profile re-expand the pair.
     redundant_role = next(
-        (
-            gw.role or gw.name
-            for gw in config.gateways
-            if gw.redundancy is not None and gw.redundancy.mode == "master"
-        ),
+        (gw.role or gw.name for gw in config.gateways if gw.redundancy is not None and gw.redundancy.mode == "master"),
         None,
     )
     # Disabled built-ins are applied stack-wide, so carry over the slugs disabled
@@ -528,14 +503,18 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
     # one node. The target profile re-applies it uniformly.
     disabled_sets = [set(gw.disable_builtins) for gw in config.gateways]
     disable_builtins = tuple(sorted(set.intersection(*disabled_sets))) if disabled_sets else ()
+    # A recorded config is resolved: its database + services live in the
+    # registry, not the legacy fields. Recover the profile inputs from the
+    # registry (sole DB instance's service slug; non-database instance slugs).
+    db_instance = config.database_instance()
     return ProfileOptions(
         spokes=spoke_count or 3,
         frontends=frontend_count or 1,
         edge_role=edge_roles[0] if edge_roles else "none",
         network_split=config.network_split,
         reverse_proxy=config.reverse_proxy,
-        database_kind=config.database.kind if config.database else None,
-        services=tuple(config.services),
+        database_kind=db_instance.service if db_instance is not None else None,
+        services=tuple(inst.service for inst in config.non_database_instances()),
         redundant_role=redundant_role,
         disable_builtins=disable_builtins,
     )

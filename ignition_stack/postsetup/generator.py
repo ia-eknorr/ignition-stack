@@ -108,12 +108,14 @@ def _collect_steps(config: ProjectConfig) -> list[_Step]:
     catalog = load_all_services()
     steps: list[_Step] = []
 
-    # Database slug == its kind (postgres/mysql/mariadb/mongo); the catalog is
-    # keyed the same way, so look both up by slug.
+    # The registry instance's service slug == its catalog key (db kind for
+    # databases, slug for everyone else), so look each up by service slug.
+    # Database first to preserve the historical step ordering.
+    db = config.database_instance()
     slugs: list[str] = []
-    if config.database is not None:
-        slugs.append(config.database.kind)
-    slugs.extend(config.services)
+    if db is not None:
+        slugs.append(db.service)
+    slugs.extend(inst.service for inst in config.non_database_instances())
 
     for slug in slugs:
         manifest = catalog.get(slug)

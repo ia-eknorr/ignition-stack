@@ -44,7 +44,7 @@ from ignition_stack.services.loader import load_all_services, load_service
 
 if TYPE_CHECKING:
     from ignition_stack.catalog.schema import Catalog, ModuleEntry
-    from ignition_stack.config.schema import GatewayConfig, ProjectConfig
+    from ignition_stack.config.schema import GatewayConfig, ProjectConfig, ServiceInstance
 
 
 # Network names used when network_split is on. The wizard (Phase 6) and
@@ -114,59 +114,75 @@ def _render_services(
         blocks.append(bootstrap_tpl.render(**_bootstrap_context(ctx)))
         blocks.append(ignition_tpl.render(**_ignition_context(ctx, config, multi)))
 
-    if config.database is not None:
-        blocks.append(_render_database(config))
+    db = config.database_instance()
+    if db is not None:
+        blocks.append(_render_database(db, config))
 
-    for svc_name in _ordered_services(config):
-        blocks.append(_render_catalog_service(svc_name, config))
+    for inst in _ordered_service_instances(config):
+        blocks.append(_render_catalog_service(inst, config))
 
     return blocks
 
 
-def _render_database(config: ProjectConfig) -> str:
+def _render_database(db: ServiceInstance, config: ProjectConfig) -> str:
     """Render the database fragment from the service catalog (keyed by kind).
 
     The container name keeps the Phase-2 conventions for byte-stability:
     single-gateway uses ``db-${GATEWAY_NAME}`` (GATEWAY_NAME equals the project
     name there); multi-gateway uses ``db-${COMPOSE_PROJECT_NAME}``.
     """
-    db = config.database
-    assert db is not None
-    container_name_ref = f"{db.name}-${{COMPOSE_PROJECT_NAME}}" if config.is_multi_gateway else f"{db.name}-${{GATEWAY_NAME}}"
-    tpl = _service_jinja_env().get_template(f"{db.kind}/compose.yaml.j2")
+    container_name_ref = f"{db.id}-${{COMPOSE_PROJECT_NAME}}" if config.is_multi_gateway else f"{db.id}-${{GATEWAY_NAME}}"
+    tpl = _service_jinja_env().get_template(f"{db.service}/compose.yaml.j2")
     return tpl.render(
-        name=db.name,
+        name=db.id,
         container_name_ref=container_name_ref,
         networks=[NETWORK_BACKEND] if config.network_split else [],
         extra_databases=db.extra_databases,
     )
 
 
-def _render_catalog_service(svc_name: str, config: ProjectConfig) -> str:
-    """Render one non-database catalog service from its compose fragment."""
-    manifest = load_service(svc_name)
-    tpl = _service_jinja_env().get_template(f"{svc_name}/compose.yaml.j2")
+def _render_catalog_service(inst: ServiceInstance, config: ProjectConfig) -> str:
+    """Render one non-database catalog service instance from its compose fragment."""
+    manifest = load_service(inst.service)
+    tpl = _service_jinja_env().get_template(f"{inst.service}/compose.yaml.j2")
     networks = [manifest.network] if config.network_split else []
+    db = config.database_instance()
     return tpl.render(
-        name=svc_name,
+        name=inst.id,
         image_ref=f"${{{manifest.image_env}}}",
-        container_name_ref=f"{svc_name}-${{COMPOSE_PROJECT_NAME}}",
+        container_name_ref=f"{inst.id}-${{COMPOSE_PROJECT_NAME}}",
         networks=networks,
         depends_on=_service_dependencies(manifest, config),
-        db_host=config.database.name if config.database else None,
-        db_kind=config.database.kind if config.database else None,
+        db_host=db.id if db is not None else None,
+        db_kind=db.service if db is not None else None,
     )
 
 
-def _ordered_services(config: ProjectConfig) -> list[str]:
-    """Selected non-database services in canonical (kind, name) order."""
+def _ordered_service_instances(config: ProjectConfig) -> list[ServiceInstance]:
+    """Non-database service instances in canonical (kind, id) order."""
     catalog = load_all_services()
     order = {kind: i for i, kind in enumerate(_SERVICE_KIND_ORDER)}
 
-    def sort_key(name: str) -> tuple[int, str]:
-        return (order.get(catalog[name].kind, len(order)), name)
+    def sort_key(inst: ServiceInstance) -> tuple[int, str]:
+        return (order.get(catalog[inst.service].kind, len(order)), inst.id)
 
-    return sorted(config.services, key=sort_key)
+    return sorted(config.non_database_instances(), key=sort_key)
+
+
+def _gateway_database_service(gw: GatewayConfig, config: ProjectConfig) -> str | None:
+    """The DB service name this gateway depends on, or None.
+
+    A gateway depends on the database only when it attaches to it. Lowered
+    configs attach every gateway to the one database, so this reproduces the
+    historical "every gateway depends_on db" wiring; an edge gateway with no DB
+    attachment emits no dependency (and gets no seeded db-connection).
+    """
+    db = config.database_instance()
+    if db is None:
+        return None
+    if any(att.instance == db.id for att in gw.services):
+        return db.id
+    return None
 
 
 def _service_dependencies(manifest: object, config: ProjectConfig) -> list[str]:
@@ -174,13 +190,14 @@ def _service_dependencies(manifest: object, config: ProjectConfig) -> list[str]:
 
     A service's ``requires:`` capabilities map to the provider already present
     in the resolved config. Today the only requirable capability is a SQL
-    database, so the dependency is the database service name when present.
+    database, so the dependency is the database instance name when present.
     """
     requires = getattr(manifest, "requires", [])
     deps: list[str] = []
     db_caps = {"sql-database", "postgres-compatible", "mysql-compatible", "document-store"}
-    if config.database is not None and any(cap in db_caps for cap in requires):
-        deps.append(config.database.name)
+    db = config.database_instance()
+    if db is not None and any(cap in db_caps for cap in requires):
+        deps.append(db.id)
     return deps
 
 
@@ -294,7 +311,7 @@ def _ignition_context(ctx: dict[str, object], config: ProjectConfig, multi: bool
         # all, matching intent - instead of omitting the var and re-enabling all.
         "disable_active": bool(gw.disable_builtins),
         "modules_enabled": _modules_enabled_for(gw, ctx["module_identifiers"]),  # type: ignore[arg-type]
-        "database_service": config.database.name if config.database else None,
+        "database_service": _gateway_database_service(gw, config),
         "networks": ctx["networks"],
         "rename": not is_backup,
         "gan_incoming": gan_incoming,
@@ -374,14 +391,21 @@ def _wrap_description(description: str) -> list[str]:
 
 
 def _describe(config: ProjectConfig) -> str:
-    """Human-readable header comment summarizing the stack."""
+    """Human-readable header comment summarizing the stack.
+
+    Reads the resolved registry (``_describe`` runs after lowering), so the
+    database and non-database services come from ``service_instances`` in
+    registry (== input) order to keep the header text byte-stable.
+    """
     n = len(config.gateways)
-    if n == 1 and config.database and config.database.kind == "postgres" and not config.services:
+    db = config.database_instance()
+    services = [inst.id for inst in config.non_database_instances()]
+    if n == 1 and db is not None and db.service == "postgres" and not services:
         return "Walking skeleton: one Ignition 8.3 gateway, one Postgres, " "env-driven commissioning so first boot needs no UI."
     parts = [f"{n} Ignition 8.3 gateway{'s' if n != 1 else ''}"]
-    if config.database:
-        parts.append(f"one {config.database.kind}")
-    parts.extend(config.services)
+    if db is not None:
+        parts.append(f"one {db.service}")
+    parts.extend(services)
     if config.network_split:
         parts.append("frontend/backend network split")
     return ", ".join(parts) + "."

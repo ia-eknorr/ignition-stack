@@ -24,10 +24,11 @@ Two kinds of rule run here, per the hybrid-resolution decision in the design:
 from __future__ import annotations
 
 from ignition_stack.config.schema import (
-    DatabaseConfig,
     GatewayConfig,
     ProjectConfig,
     RedundancyConfig,
+    ServiceAttachment,
+    ServiceInstance,
 )
 from ignition_stack.services.loader import load_all_services
 from ignition_stack.services.manifest import ServiceManifest
@@ -66,13 +67,81 @@ def resolve(config: ProjectConfig) -> ProjectConfig:
     catalog = load_all_services()
     resolved = config.model_copy(deep=True)
 
+    # Validate the legacy input shims first (unchanged ResolveError messages),
+    # then lower them into the registry so every later pass reads one source of
+    # truth. Validating before lowering keeps the unknown-slug / db-in-services
+    # errors as ResolveError rather than the pydantic ValidationError the
+    # ServiceInstance schema validator would raise once a slug is lowered.
     _validate_services(resolved, catalog)
+    _lower_legacy(resolved, catalog)
+    _validate_registry(resolved, catalog)
     _expand_redundancy(resolved)
     _satisfy_required_capabilities(resolved, catalog)
-    _apply_keycloak_database(resolved)
-    _apply_jdbc_drivers(resolved)
+    _apply_keycloak_database(resolved, catalog)
+    _apply_jdbc_drivers(resolved, catalog)
 
     return resolved
+
+
+def _lower_legacy(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
+    """Lower the legacy ``database`` + ``services`` shims into the registry.
+
+    Each legacy field becomes a :class:`ServiceInstance` plus a ``consumer``
+    :class:`ServiceAttachment` on every gateway, then the legacy field is
+    cleared so the registry is the single source of truth. Idempotent: on a
+    re-resolve both legacy fields are already empty and the guard clauses skip
+    instances/attachments that already exist, so ``resolve(resolve(c))`` equals
+    ``resolve(c)``.
+
+    The database keeps its old ``name`` as the instance ``id`` (the rendered DB
+    service stays ``db``) and fans a consumer attachment to all gateways,
+    matching the pre-registry behavior where every gateway connected to the one
+    shared database.
+    """
+    if config.database is not None:
+        db = config.database
+        if not any(inst.id == db.name for inst in config.service_instances):
+            config.service_instances.append(
+                ServiceInstance(
+                    id=db.name,
+                    service=db.kind,
+                    image=db.image,
+                    user=db.user,
+                    password=db.password,
+                    extra_databases=list(db.extra_databases),
+                )
+            )
+        _attach_all_gateways(config, db.name)
+        config.database = None
+
+    for slug in config.services:
+        if not any(inst.id == slug for inst in config.service_instances):
+            config.service_instances.append(ServiceInstance(id=slug, service=slug))
+        _attach_all_gateways(config, slug)
+    config.services = []
+
+
+def _attach_all_gateways(config: ProjectConfig, instance_id: str, role: str = "consumer") -> None:
+    """Give every gateway a ``role`` attachment to ``instance_id`` (idempotent)."""
+    for gw in config.gateways:
+        if not any(att.instance == instance_id for att in gw.services):
+            gw.services.append(ServiceAttachment(instance=instance_id, role=role))
+
+
+def _validate_registry(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
+    """Reject more than one database instance (multi-DB is Phase 2)."""
+    db_instances = [inst for inst in config.service_instances if catalog[inst.service].kind == "database"]
+    if len(db_instances) > 1:
+        kinds = ", ".join(inst.service for inst in db_instances)
+        raise ResolveError(f"only one database is supported per stack, but the registry has {len(db_instances)} ({kinds}); multi-database stacks arrive in a later phase")
+
+
+def _database_instance(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> ServiceInstance | None:
+    """The sole database-kind instance in the registry, or None."""
+    return next(
+        (inst for inst in config.service_instances if catalog[inst.service].kind == "database"),
+        None,
+    )
 
 
 def _expand_redundancy(config: ProjectConfig) -> None:
@@ -91,14 +160,8 @@ def _expand_redundancy(config: ProjectConfig) -> None:
     (JDBC drivers, etc.) afterwards treats it like any other gateway. The
     compose engine wires its Gateway Network link to the master.
     """
-    paired_masters = {
-        gw.redundancy.peer
-        for gw in config.gateways
-        if gw.redundancy is not None and gw.redundancy.mode == "backup"
-    }
-    masters = [
-        gw for gw in config.gateways if gw.redundancy is not None and gw.redundancy.mode == "master"
-    ]
+    paired_masters = {gw.redundancy.peer for gw in config.gateways if gw.redundancy is not None and gw.redundancy.mode == "backup"}
+    masters = [gw for gw in config.gateways if gw.redundancy is not None and gw.redundancy.mode == "master"]
     for master in masters:
         if master.name in paired_masters:
             continue  # already expanded (e.g. loaded from a dumped config)
@@ -112,6 +175,7 @@ def _expand_redundancy(config: ProjectConfig) -> None:
                 http_port=next_port,
                 modules=list(master.modules),
                 disable_builtins=list(master.disable_builtins),
+                services=[att.model_copy(deep=True) for att in master.services],
                 redundancy=RedundancyConfig(
                     mode="backup",
                     peer=master.name,
@@ -128,59 +192,76 @@ def _validate_services(config: ProjectConfig, catalog: dict[str, ServiceManifest
             known = ", ".join(sorted(catalog))
             raise ResolveError(f"unknown service '{svc}'; known services: {known}")
         if catalog[svc].kind == "database":
-            raise ResolveError(
-                f"'{svc}' is a database; set it as the project's 'database', not in 'services'"
-            )
+            raise ResolveError(f"'{svc}' is a database; set it as the project's 'database', not in 'services'")
 
 
-def _satisfy_required_capabilities(
-    config: ProjectConfig, catalog: dict[str, ServiceManifest]
-) -> None:
+def _satisfy_required_capabilities(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
+    """Auto-add a database instance for any unmet ``requires`` capability.
+
+    Operates on the registry: collect ``requires`` across every instance's
+    manifest and, for each capability nothing provides, add the default
+    database as a :class:`ServiceInstance`. The auto-added database is wired to
+    every gateway with a consumer attachment, preserving the pre-registry
+    behavior where the implicit Keycloak database connected to (and seeded onto)
+    all gateways. Its id is ``db`` so the rendered service name matches today's
+    output exactly.
+    """
     required: set[str] = set()
-    for svc in config.services:
-        required.update(catalog[svc].requires)
+    for inst in config.service_instances:
+        required.update(catalog[inst.service].requires)
 
     for cap in sorted(required):
         if _capability_satisfied(cap, config, catalog):
             continue
         db_kind = _DEFAULT_DB_FOR_CAPABILITY.get(cap)
         if db_kind is None:
+            raise ResolveError(f"required capability '{cap}' is provided by no selected service " "and cannot be auto-added")
+        existing = _database_instance(config, catalog)
+        if existing is not None:
             raise ResolveError(
-                f"required capability '{cap}' is provided by no selected service "
-                "and cannot be auto-added"
-            )
-        if config.database is not None:
-            raise ResolveError(
-                f"a '{config.database.kind}' database is selected, but capability "
+                f"a '{existing.service}' database is selected, but capability "
                 f"'{cap}' needs a different database and only one database is "
                 "supported per stack; choose a compatible database"
             )
-        config.database = DatabaseConfig(kind=db_kind)
+        config.service_instances.append(ServiceInstance(id="db", service=db_kind))
+        _attach_all_gateways(config, "db")
 
 
-def _capability_satisfied(
-    cap: str, config: ProjectConfig, catalog: dict[str, ServiceManifest]
-) -> bool:
-    if config.database is not None and cap in _DB_CAPABILITIES.get(config.database.kind, set()):
-        return True
-    return any(cap in catalog[svc].provides for svc in config.services)
+def _capability_satisfied(cap: str, config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> bool:
+    for inst in config.service_instances:
+        manifest = catalog[inst.service]
+        if manifest.kind == "database" and cap in _DB_CAPABILITIES.get(inst.service, set()):
+            return True
+        if cap in manifest.provides:
+            return True
+    return False
 
 
-def _apply_keycloak_database(config: ProjectConfig) -> None:
-    if "keycloak" not in config.services or config.database is None:
+def _apply_keycloak_database(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
+    if not any(inst.service == "keycloak" for inst in config.service_instances):
         return
-    if config.database.kind not in _KEYCLOAK_SQL_KINDS:
+    db = _database_instance(config, catalog)
+    if db is None or db.service not in _KEYCLOAK_SQL_KINDS:
         return
-    if "keycloak" not in config.database.extra_databases:
-        config.database.extra_databases.append("keycloak")
+    if "keycloak" not in db.extra_databases:
+        db.extra_databases.append("keycloak")
 
 
-def _apply_jdbc_drivers(config: ProjectConfig) -> None:
-    if config.database is None:
-        return
-    driver = _DB_JDBC_DRIVER.get(config.database.kind)
-    if driver is None:
-        return
+def _apply_jdbc_drivers(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
+    """Attach the JDBC driver module to each gateway bound to a needy database.
+
+    Per-gateway: a gateway gets the driver only when it attaches to a database
+    instance whose kind has no built-in Ignition driver. For lowered configs
+    every gateway attaches to the database, so this reproduces the old
+    fan-to-all-gateways behavior; a future edge gateway with no DB attachment
+    keeps a clean module list.
+    """
+    instances = {inst.id: inst for inst in config.service_instances}
     for gw in config.gateways:
-        if driver not in gw.modules:
-            gw.modules.append(driver)
+        for att in gw.services:
+            inst = instances.get(att.instance)
+            if inst is None:
+                continue
+            driver = _DB_JDBC_DRIVER.get(inst.service)
+            if driver is not None and driver not in gw.modules:
+                gw.modules.append(driver)

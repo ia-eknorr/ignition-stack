@@ -39,6 +39,123 @@ _DB_IMAGE_ENV = {
     "mongo": "MONGO_IMAGE",
 }
 
+# A service slug names a database instance exactly when it is one of the four
+# database kinds (the database catalog is keyed by kind). Membership in this
+# table is the catalog-free way the registry helpers and the Phase-2 property
+# shims tell a database instance apart from any other catalog service without
+# loading the service catalog at schema-import time.
+_DB_SERVICE_SLUGS = frozenset(_DB_DEFAULT_IMAGE)
+
+# Roles a gateway attachment may declare. Phase 1 only renders "consumer"
+# (a plain DB consumer, the lowering default); "owner" and the two mqtt roles
+# are reserved for the Phase 2-3 Edge invariant + IIoT overlay but are accepted
+# now so hand-authored configs can express them ahead of the wiring.
+_ATTACHMENT_ROLES = frozenset({"consumer", "owner", "mqtt-transmission", "mqtt-engine"})
+
+
+class ServiceInstance(BaseModel):
+    """One concrete service in the stack-level registry.
+
+    Phase 1 of issue #43 replaces the flat ``services: list[str]`` + single
+    ``database`` model with this registry: each entry is an addressable
+    instance keyed by ``id`` and backed by a catalog ``service`` slug. The
+    legacy fields stay loadable as input shims that ``resolve()`` lowers into
+    registry entries (see :func:`ignition_stack.services.resolver._lower_legacy`),
+    so existing configs keep rendering byte-identical output.
+
+    The database-only extras (``user`` / ``password`` / ``extra_databases``)
+    fold the old :class:`DatabaseConfig` into the instance. They are rejected on
+    a non-database ``service`` by a catalog-aware validator so a typo can't
+    silently set credentials on, say, a broker.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Unique registry key; also the compose service name and seed dir.")
+    service: str = Field(description="Catalog slug backing this instance (manifest lookup key).")
+    image: str = Field(default="", description="image:tag override; filled from the manifest default when blank.")
+    env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Per-instance .env overrides layered over the manifest's preset env.",
+    )
+    user: str = Field(default="ignition", description="Database user (database services only).")
+    password: str = Field(default="ignition", description="Database password (database services only).")
+    extra_databases: list[str] = Field(
+        default_factory=list,
+        description="Extra logical databases to create on first init (database services only).",
+    )
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id(cls, v: str) -> str:
+        if not _NAME_RE.match(v):
+            raise ValueError("instance id must start with a lowercase letter and contain only lowercase letters, digits, hyphens, or underscores")
+        return v
+
+    @field_validator("service")
+    @classmethod
+    def _validate_service_exists(cls, v: str) -> str:
+        # Catalog lookup in a validator, precedented by
+        # GatewayConfig._validate_disable_builtins; imported locally to keep the
+        # schema free of a load-time catalog dependency.
+        from ignition_stack.services.loader import load_all_services
+
+        catalog = load_all_services()
+        if v not in catalog:
+            known = ", ".join(sorted(catalog))
+            raise ValueError(f"unknown service '{v}'; known services: {known}")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_db_fields_and_fill_image(self) -> ServiceInstance:
+        from ignition_stack.services.loader import load_service
+
+        manifest = load_service(self.service)
+        if manifest.kind != "database" and (self.user != "ignition" or self.password != "ignition" or self.extra_databases):
+            raise ValueError(f"user/password/extra_databases are only valid for database services; '{self.service}' is kind '{manifest.kind}'")
+        if not self.image:
+            self.image = manifest.image
+        return self
+
+    @property
+    def is_database(self) -> bool:
+        """True when this instance is one of the four database kinds."""
+        return self.service in _DB_SERVICE_SLUGS
+
+    @property
+    def image_env(self) -> str:
+        """The ``.env`` key the compose fragment reads for this instance's image.
+
+        Database instances map their kind to the fixed ``<KIND>_IMAGE`` key;
+        non-database instances carry the key on their manifest, so this property
+        is only meaningful for databases (the writer reads the manifest directly
+        for the rest).
+        """
+        return _DB_IMAGE_ENV[self.service]
+
+
+class ServiceAttachment(BaseModel):
+    """A per-gateway reference to a registry :class:`ServiceInstance`.
+
+    The attachment is the gateway -> service edge: it names the instance the
+    gateway uses and the ``role`` it plays (Phase 1 lowers everything to
+    ``consumer``). Keeping the edge explicit is what lets a future Edge gateway
+    use Keycloak SSO while never holding a database connection.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    instance: str = Field(description="The ServiceInstance.id this gateway attaches to.")
+    role: str = Field(default="consumer", description="consumer | owner | mqtt-transmission | mqtt-engine.")
+
+    @field_validator("role")
+    @classmethod
+    def _validate_role(cls, v: str) -> str:
+        if v not in _ATTACHMENT_ROLES:
+            allowed = ", ".join(sorted(_ATTACHMENT_ROLES))
+            raise ValueError(f"unknown attachment role '{v}'; allowed: {allowed}")
+        return v
+
 
 class RedundancyConfig(BaseModel):
     """Redundancy descriptor attached to a gateway that is part of a pair.
@@ -140,6 +257,15 @@ class GatewayConfig(BaseModel):
             "pair. None (default) is a standalone, non-redundant gateway. The "
             "resolver expands a single master-marked gateway into the pair; the "
             "compose engine wires the backup's Gateway Network link to the master."
+        ),
+    )
+    services: list[ServiceAttachment] = Field(
+        default_factory=list,
+        description=(
+            "Registry attachments: which ServiceInstances this gateway uses and "
+            "the role it plays. Empty for a legacy input config; resolve() lowers "
+            "the stack-wide 'database'/'services' fields into per-gateway consumer "
+            "attachments here, so a resolved config carries all edges explicitly."
         ),
     )
     gan_outgoing: list[str] = Field(
@@ -313,6 +439,15 @@ class ProjectConfig(BaseModel):
             "dependencies (Keycloak -> a SQL database)."
         ),
     )
+    service_instances: list[ServiceInstance] = Field(
+        default_factory=list,
+        description=(
+            "The stack-level service registry. Empty on a freshly authored "
+            "legacy config; resolve() lowers 'database'/'services' into it and "
+            "clears those shims, making the registry the single source of truth "
+            "the compose engine and writer render from."
+        ),
+    )
     network_split: bool = Field(
         default=False,
         description=(
@@ -351,17 +486,40 @@ class ProjectConfig(BaseModel):
     def gateway_http_port(self) -> int:
         return self.gateways[0].http_port
 
+    def database_instance(self) -> ServiceInstance | None:
+        """The sole database instance in the registry, or None.
+
+        Phase 1 pins the registry to at most one database instance (the
+        resolver rejects a second), so a plain ``next(...)`` is unambiguous.
+        """
+        return next((inst for inst in self.service_instances if inst.is_database), None)
+
+    def non_database_instances(self) -> list[ServiceInstance]:
+        """Registry instances that are not databases, in registry (input) order."""
+        return [inst for inst in self.service_instances if not inst.is_database]
+
     @property
     def db_user(self) -> str:
-        return self.database.user if self.database else ""
+        # Prefer the legacy field pre-lowering; fall back to the registry's sole
+        # database instance post-lowering; else the historical empty default.
+        if self.database is not None:
+            return self.database.user
+        inst = self.database_instance()
+        return inst.user if inst is not None else ""
 
     @property
     def db_password(self) -> str:
-        return self.database.password if self.database else ""
+        if self.database is not None:
+            return self.database.password
+        inst = self.database_instance()
+        return inst.password if inst is not None else ""
 
     @property
     def postgres_image(self) -> str:
-        return self.database.image if self.database else ""
+        if self.database is not None:
+            return self.database.image
+        inst = self.database_instance()
+        return inst.image if inst is not None else ""
 
     @property
     def is_multi_gateway(self) -> bool:
@@ -387,6 +545,33 @@ class ProjectConfig(BaseModel):
         if len(set(self.services)) != len(self.services):
             dupes = sorted({s for s in self.services if self.services.count(s) > 1})
             raise ValueError(f"services must be unique; duplicates: {dupes}")
+        return self
+
+    @model_validator(mode="after")
+    def _unique_instance_ids(self) -> ProjectConfig:
+        ids = [inst.id for inst in self.service_instances]
+        if len(set(ids)) != len(ids):
+            dupes = sorted({i for i in ids if ids.count(i) > 1})
+            raise ValueError(f"service instance ids must be unique; duplicates: {dupes}")
+        return self
+
+    @model_validator(mode="after")
+    def _attachments_reference_instances(self) -> ProjectConfig:
+        """Every gateway attachment must name a declared instance.
+
+        Only enforced once the registry is populated: a legacy input config
+        carries no ``service_instances`` (the resolver creates both the
+        instances and the attachments together when it lowers the legacy
+        fields), so a hand-authored config that declares attachments must also
+        declare the instances they reference.
+        """
+        if not self.service_instances:
+            return self
+        ids = {inst.id for inst in self.service_instances}
+        for gw in self.gateways:
+            for att in gw.services:
+                if att.instance not in ids:
+                    raise ValueError(f"gateway '{gw.name}' attaches to unknown service instance '{att.instance}'; declared instances: {sorted(ids)}")
         return self
 
     @model_validator(mode="after")

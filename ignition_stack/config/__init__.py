@@ -5,6 +5,8 @@ from ignition_stack.config.schema import (
     ProjectConfig,
     RedundancyConfig,
     ReverseProxyConfig,
+    ServiceAttachment,
+    ServiceInstance,
 )
 
 __all__ = [
@@ -15,6 +17,8 @@ __all__ = [
     "ProjectConfig",
     "RedundancyConfig",
     "ReverseProxyConfig",
+    "ServiceAttachment",
+    "ServiceInstance",
     "dump_config",
     "load_config",
 ]

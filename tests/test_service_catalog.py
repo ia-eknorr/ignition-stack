@@ -77,11 +77,7 @@ def _check_or_update_golden(rel_path: str, actual: str) -> None:
                 n=2,
             )
         )
-        pytest.fail(
-            f"compose output diverges from golden '{rel_path}'.\n"
-            "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n"
-            f"{diff}"
-        )
+        pytest.fail(f"compose output diverges from golden '{rel_path}'.\n" "Run with UPDATE_GOLDENS=1 to update if the change is intentional.\n\n" f"{diff}")
 
 
 def _render(config: ProjectConfig) -> str:
@@ -162,10 +158,15 @@ def test_service_env_credentials_appear_in_dotenv(svc: str, tmp_path: Path) -> N
 
 
 def test_keycloak_without_database_adds_postgres_and_schema() -> None:
+    # Phase 1 (issue #43): resolve lowers the database into the registry and
+    # clears the legacy field, so assert against the resolved registry instance.
     resolved = resolve(ProjectConfig(name="kc", database=None, services=["keycloak"]))
-    assert resolved.database is not None
-    assert resolved.database.kind == "postgres"
-    assert "keycloak" in resolved.database.extra_databases
+    assert resolved.database is None
+    db = resolved.database_instance()
+    assert db is not None
+    assert db.id == "db"
+    assert db.service == "postgres"
+    assert "keycloak" in db.extra_databases
 
 
 def test_keycloak_compose_depends_on_the_database() -> None:
@@ -180,19 +181,17 @@ def test_keycloak_compose_depends_on_the_database() -> None:
 
 def test_keycloak_with_existing_postgres_reuses_it() -> None:
     """A Postgres already present satisfies Keycloak; no second database appears."""
-    resolved = resolve(
-        ProjectConfig(name="kc", database=DatabaseConfig(kind="postgres"), services=["keycloak"])
-    )
-    assert resolved.database.kind == "postgres"
-    assert "keycloak" in resolved.database.extra_databases
+    resolved = resolve(ProjectConfig(name="kc", database=DatabaseConfig(kind="postgres"), services=["keycloak"]))
+    dbs = [inst for inst in resolved.service_instances if inst.is_database]
+    assert len(dbs) == 1
+    assert dbs[0].service == "postgres"
+    assert "keycloak" in dbs[0].extra_databases
 
 
 def test_keycloak_with_mongo_only_is_a_conflict() -> None:
     """Mongo can't satisfy Keycloak's sql-database need and we allow only one DB."""
     with pytest.raises(ResolveError, match="needs a different database"):
-        resolve(
-            ProjectConfig(name="kc", database=DatabaseConfig(kind="mongo"), services=["keycloak"])
-        )
+        resolve(ProjectConfig(name="kc", database=DatabaseConfig(kind="mongo"), services=["keycloak"]))
 
 
 def test_mysql_attaches_jdbc_driver_to_every_gateway() -> None:
@@ -252,19 +251,7 @@ def test_gateway_resources_overlay_every_gateway(tmp_path: Path) -> None:
     )
     write_project(config, tmp_path / "multi")
     for gw in ("frontend", "backend"):
-        conn = (
-            tmp_path
-            / "multi"
-            / "services"
-            / gw
-            / "config"
-            / "resources"
-            / "core"
-            / "ignition"
-            / "database-connection"
-            / "db"
-            / "config.json"
-        )
+        conn = tmp_path / "multi" / "services" / gw / "config" / "resources" / "core" / "ignition" / "database-connection" / "db" / "config.json"
         assert conn.is_file(), f"db-connection missing on gateway '{gw}'"
 
 
