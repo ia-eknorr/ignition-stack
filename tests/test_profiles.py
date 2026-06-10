@@ -489,15 +489,18 @@ def test_mcp_n8n_writer_emits_dropin_and_post_setup(tmp_path: Path) -> None:
 
 def test_mcp_n8n_wizard_flow_writes_expected_project(tmp_path: Path) -> None:
     """Validation: wizard for mcp-n8n produces n8n + dropin + POST-SETUP entry."""
-    # Scripted answers in wizard order: profile -> db -> edge_role -> proxy -> confirm
+    # Scripted answers in wizard order: track -> profile -> db -> edge_role ->
+    # iiot -> modules -> proxy -> summary action
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "mcp-n8n",  # profile
             "postgres",  # database
             "none",  # edge_role
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",  # reverse proxy
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -563,14 +566,16 @@ def test_install_traefik_wizard_branch(tmp_path: Path) -> None:
     """Wizard 'install Traefik' answer drives the same scaffold."""
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "standalone",  # profile
             "postgres",  # database
             "none",  # edge_role
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "install",  # reverse proxy
             "reverse-proxy",  # path
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -587,16 +592,18 @@ def test_install_traefik_wizard_branch(tmp_path: Path) -> None:
 def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "hub-and-spoke",  # profile
             6,  # spokes (yellow tier)
             "postgres",  # database
             "spoke",  # edge_role
             False,  # network split (off for hub-and-spoke)
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",  # proxy
             True,  # advisory confirm
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -608,16 +615,18 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
 def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "hub-and-spoke",
             6,  # yellow tier
             "postgres",
             "spoke",
             False,  # network split
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",
             False,  # decline advisory
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -629,16 +638,18 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
 def test_wizard_red_tier_confirmed_sets_force() -> None:
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "hub-and-spoke",
             12,  # red tier
             "postgres",
             "spoke",
             False,  # network split
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",
             True,  # acknowledge red
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -650,16 +661,18 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
 def test_wizard_red_tier_declined_falls_back() -> None:
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "hub-and-spoke",
             12,
             "postgres",
             "spoke",
             False,  # network split
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",
             False,  # decline red
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -673,15 +686,17 @@ def test_wizard_scaleout_frontends_and_network_split() -> None:
     the resolved config."""
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "scaleout",  # profile
             2,  # frontend count
             "postgres",  # database
             "none",  # edge_role
             True,  # network split
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",  # reverse proxy
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -695,15 +710,17 @@ def test_wizard_scaleout_frontends_and_network_split() -> None:
 def test_wizard_scaleout_network_split_declined() -> None:
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "scaleout",
             1,  # single frontend
             "postgres",
             "none",
             False,  # network split off
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",
-            True,
+            "generate",
         ]
     )
     outcome = walk("demo", prompter)
@@ -714,13 +731,15 @@ def test_wizard_scaleout_network_split_declined() -> None:
 def test_wizard_summary_decline_marks_unconfirmed() -> None:
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "standalone",
             "postgres",
             "none",
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "external",
-            False,  # decline at summary
+            "cancel",  # cancel at summary
         ]
     )
     outcome = walk("demo", prompter)
@@ -752,13 +771,15 @@ def test_wizard_modules_decline_applies_lean_default() -> None:
     the path everyone takes."""
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "standalone",  # profile
             "postgres",  # database
             "none",  # edge_role
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default, no checkbox
             "external",  # reverse proxy
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -785,13 +806,15 @@ def test_wizard_modules_jdbc_driver_follows_database() -> None:
     Postgres one - the driver tracks the database, not a static default."""
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "standalone",
             "mariadb",  # database -> MariaDB JDBC driver
             "none",
-            False,
+            False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # accept lean default
             "external",
-            True,
+            "generate",
         ]
     )
     outcome = walk("demo", prompter)
@@ -805,16 +828,18 @@ def test_wizard_modules_customize_inverts_enabled_selection() -> None:
     inverse as disable_builtins, and the choice flows to every gateway."""
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "scaleout",  # profile
             1,  # frontend count
             "postgres",  # database
             "none",  # edge_role
             True,  # network split
             False,  # redundancy
+            False,  # wire IIoT? -> no
             True,  # customize modules? -> opens checkbox
             ["perspective", "vision"],  # ENABLE only these two
             "external",  # reverse proxy
-            True,  # summary confirm
+            "generate",  # summary action
         ]
     )
     outcome = walk("demo", prompter)
@@ -835,18 +860,104 @@ def test_wizard_modules_no_database_enables_no_jdbc_driver() -> None:
     up disabled."""
     prompter = ScriptedPrompter(
         [
+            "quick",  # track gate
             "standalone",
             "none",  # database -> None, no JDBC driver
             "none",  # edge_role
             False,  # redundancy
+            False,  # wire IIoT? -> no
             False,  # accept lean default
             "external",
-            True,
+            "generate",
         ]
     )
     outcome = walk("demo", prompter)
     disabled = set(outcome.options.disable_builtins)
     assert {"postgresql-jdbc-driver", "mariadb-jdbc-driver", "mssql-jdbc-driver"} <= disabled
+
+
+# --------------------------------------------------------------------------- #
+# Phase 7 track gate: quick is the unchanged linear flow
+# --------------------------------------------------------------------------- #
+
+
+def test_wizard_quick_track_matches_profile_build_exactly() -> None:
+    """For the same answers, the quick track yields exactly the config the
+    non-interactive profile path builds: the track gate and the new prompts
+    (IIoT declined) change nothing about the produced object."""
+    prompter = ScriptedPrompter(
+        [
+            "quick",  # track gate
+            "standalone",
+            "postgres",
+            "none",  # edge_role
+            False,  # redundancy
+            False,  # wire IIoT? -> no
+            False,  # accept lean module default
+            "external",
+            "generate",
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed
+    expected = build_profile("standalone", "demo", ProfileOptions(disable_builtins=outcome.options.disable_builtins))
+    assert outcome.config.model_dump(mode="json") == expected.model_dump(mode="json")
+
+
+# --------------------------------------------------------------------------- #
+# IIoT confirm (phase 7): the quick track gains an MQTT-pipeline overlay prompt
+# --------------------------------------------------------------------------- #
+
+
+def test_wizard_iiot_declined_leaves_no_broker() -> None:
+    """Declining the IIoT confirm wires no broker and no mqtt attachments."""
+    prompter = ScriptedPrompter(
+        [
+            "quick",  # track gate
+            "standalone",
+            "postgres",
+            "none",  # edge_role
+            False,  # redundancy
+            False,  # wire IIoT? -> no
+            False,  # accept lean default
+            "external",
+            "generate",
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.options.iiot is False
+    assert not any(inst.service in {"chariot", "emqx", "hivemq", "rabbitmq"} for inst in outcome.config.service_instances)
+    assert not any(att.role in {"mqtt-transmission", "mqtt-engine"} for gw in outcome.config.gateways for att in gw.services)
+
+
+def test_wizard_iiot_accepted_default_chariot_wired_by_role() -> None:
+    """Accepting IIoT with the default broker wires chariot, Transmission to the
+    edge-side role and Engine to the central role (apply_iiot semantics)."""
+    prompter = ScriptedPrompter(
+        [
+            "quick",  # track gate
+            "scaleout",
+            1,  # frontend count
+            "postgres",
+            "none",  # edge_role
+            True,  # network split
+            False,  # redundancy
+            True,  # wire IIoT? -> yes
+            "chariot",  # broker (default)
+            False,  # accept lean default
+            "external",
+            "generate",
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.options.iiot is True
+    assert outcome.options.iiot_broker == "chariot"
+    assert any(inst.id == "chariot" for inst in outcome.config.service_instances)
+    by_name = {gw.name: gw for gw in outcome.config.gateways}
+    frontend_roles = {att.role for att in by_name["frontend"].services if att.instance == "chariot"}
+    backend_roles = {att.role for att in by_name["backend"].services if att.instance == "chariot"}
+    assert frontend_roles == {"mqtt-transmission"}
+    assert backend_roles == {"mqtt-engine"}
 
 
 # --------------------------------------------------------------------------- #

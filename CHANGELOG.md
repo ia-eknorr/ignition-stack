@@ -6,8 +6,59 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-gateway service composition.** A stack is now a registry of named
+  `ServiceInstance`s plus explicit `ServiceAttachment`s that wire each instance
+  to the gateways that use it, with a role on every edge. One gateway can run a
+  different mix than the next, and a single instance - a database, a Keycloak, a
+  broker - can be shared across gateways instead of duplicated. The familiar
+  `database` / `services` fields stay as shorthand for the common single-gateway
+  shape; the resolver lowers them into the registry, so old configs keep
+  building byte-for-byte while the richer form becomes expressible. The resolver
+  enforces the invariants this opens up: multiple databases are allowed only
+  when their kinds are distinct, a gateway holds at most one database
+  connection, and singletons (database / identity / broker) appear once.
+- **Edge gateways never carry a database.** An Ignition Edge gateway is a leaf
+  node, so attaching it to any `never_on_edge` service (every database) is
+  rejected at config-construction time rather than failing at boot. The wizard's
+  composer filters those services out of an Edge gateway's catalog entirely, with
+  a note, so the invalid choice is never offered.
+- **IIoT overlay.** `init --iiot` (and `--iiot-broker <slug>`, which implies it)
+  adds an MQTT broker and wires the Cirrus Link Transmission/Engine modules
+  across the gateways by role: edge-side gateways (spokes, frontends) publish
+  Sparkplug through Transmission, central gateways (hub, backend) aggregate
+  through Engine, and a single-gateway shape runs both for a self-contained loop.
+  The broker defaults to `chariot` (Cirrus Link's own), and the overlay reads the
+  Transmission/Engine module slugs from the broker manifest rather than
+  hardcoding them. The Cirrus Link modules are pinned to 5.0.3 with fixed
+  download URLs, so a wired stack fetches a known-good module set.
+- **Zero-touch Keycloak OIDC seeding.** Adding Keycloak pre-seeds a realm, an
+  Ignition OIDC client with a fixed demo client secret, and a `demo` / `demo`
+  user, and writes the gateway's identity-provider config to match - so an OIDC
+  login works on first boot with no console clicks. The fixed secret is a
+  demo-only convenience; rotate it for anything that leaves a workstation.
+  Keycloak's own backing database is pulled in as an unattached, registry-level
+  dependency so it never collides with a gateway's data store.
+- **The two-track wizard.** `init` without `--profile` opens with one question:
+  *Quick* walks the linear profile flow (now including an MQTT-pipeline confirm),
+  and its summary offers a three-way **generate / tweak / cancel** where *tweak*
+  hands the built stack to the composer pre-filled. *Custom* starts from a
+  topology preset and drops into a composer for per-gateway service composition -
+  attach a service to a gateway, share an instance across gateways, set
+  per-gateway editions and modules, and wire or unwire the MQTT pipeline. Every
+  edit is validated before it lands: a mutation that would break an invariant
+  prints one error line and leaves the composition untouched. Both doors produce
+  the same kind of project and the same saved lifecycle record.
+
 ### Changed
 
+- **Declarative round-trip and switch-profile now carry the full registry.** A
+  dumped config round-trips through dump → load → resolve to a fixed point even
+  for a heterogeneous, hand-composed stack, and `switch-profile` carries the
+  per-gateway instances, shared attachments, second databases, and IIoT wiring
+  across a reshape - re-mapping attachments onto the new topology's roles and
+  dropping with an advisory only what the target shape cannot host.
 - **The wizard's module step is now opt-in.** Instead of enabling every built-in
   and offering an opt-out "select modules to DISABLE" checklist, the wizard
   pre-selects a lean curated set - Perspective, OPC-UA, SQL Bridge, the historian

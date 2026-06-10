@@ -9,10 +9,16 @@ testable without a TTY this way.
 
 The UX shape borrows from Create T3 App: select -> defaults -> summary ->
 generate. Each step is one Questionary prompt; the summary screen
-recaps the resolved choices and a single confirm gates the write.
+recaps the resolved choices and gates the write.
 
-Step order:
+The first prompt is a **two-track gate** (issue #43 phase 7). *Quick* walks
+the linear profile flow below; *Custom* hands off to
+:mod:`ignition_stack.wizard_composer` for per-gateway service composition on a
+topology preset. Both tracks produce the same :class:`ProjectConfig`.
 
+Quick-track step order:
+
+0. **Track** - quick (linear profile flow) or custom (composer). Default quick.
 1. **Profile** - which of the four canned shapes the user wants.
 2. **Profile-specific count** - spoke count for hub-and-spoke, frontend
    count for scaleout (skipped for single-gateway profiles).
@@ -25,18 +31,24 @@ Step order:
 6. **Redundancy** - for profiles with a single workhorse role (standalone
    gateway, scaleout backend, hub-and-spoke hub), whether to add a backup
    node and form a master/backup pair. Defaults off.
-7. **Modules** - opt-in selection of built-in IA modules. A curated default
+7. **IIoT** - whether to overlay an MQTT/Sparkplug pipeline (Cirrus
+   Transmission/Engine + a broker). Default no; on "yes" a broker select
+   defaults to chariot. Wires Transmission to edge-side roles and Engine to
+   central roles via ``apply_iiot``.
+8. **Modules** - opt-in selection of built-in IA modules. A curated default
    set (Perspective, OPC-UA, SQL Bridge, the historian pair, Alarm
    Notification, Reporting) plus the JDBC driver matching the chosen database
    are pre-checked; the un-selected remainder becomes ``disable_builtins``,
    which the engine inverts into the GATEWAY_MODULES_ENABLED whitelist. Gated
    behind a "Customize?" confirm; declining accepts the lean default.
-8. **Reverse proxy** - existing/install-Traefik/skip.
-9. **Summary + confirm**.
+9. **Reverse proxy** - existing/install-Traefik/skip.
+10. **Summary** - a three-way select: *generate* (write the project),
+    *tweak* (hand the built+resolved config to the Custom composer pre-filled),
+    or *cancel* (abort).
 
-Per-gateway env-var overrides (``memory_mb`` etc.) are deferred to Phase 7
-when the lifecycle/reset commands need them; the gateway model already
-accepts them, so adding a wizard step on top is a non-breaking follow-up.
+Per-gateway env-var overrides (``memory_mb`` etc.) are deferred to a future
+phase; the gateway model already accepts them, so adding a wizard step on top
+is a non-breaking follow-up.
 """
 
 from __future__ import annotations
@@ -52,6 +64,12 @@ from ignition_stack.profiles import (
     build_profile,
     list_profiles,
 )
+from ignition_stack.services.resolver import resolve
+
+# Track-gate values (the wizard's first prompt). Quick keeps the linear profile
+# flow; Custom hands off to the per-gateway composer.
+_TRACK_QUICK = "quick"
+_TRACK_CUSTOM = "custom"
 
 # Database options shown in the wizard, in the order they appear on screen.
 _DB_CHOICES: list[tuple[str, str]] = [
@@ -163,10 +181,20 @@ def run_wizard(name: str, prompter: Prompter | None = None) -> ProjectConfig:
 def walk(name: str, prompter: Prompter) -> WizardOutcome:
     """Walk the decision tree and return the resolved config + summary.
 
-    Pure modulo the prompter; no I/O, no global state. Profile validation
-    happens once, at the end - red-tier hub-and-spoke advisories surface as
-    :class:`ProfileError`, which the CLI catches.
+    Pure modulo the prompter; no global state. The first prompt is the
+    two-track gate: *quick* runs the linear profile flow, *custom* hands off to
+    the per-gateway composer. Both return a :class:`WizardOutcome` whose
+    ``config`` is what the CLI writes.
     """
+    track = _ask_track(prompter)
+    if track == _TRACK_CUSTOM:
+        return _run_custom_track(name, prompter)
+    return _run_quick_track(name, prompter)
+
+
+def _run_quick_track(name: str, prompter: Prompter) -> WizardOutcome:
+    """The linear profile flow (unchanged shape, plus the IIoT confirm and the
+    three-way summary that can hand off to the composer)."""
     profile_slug = _ask_profile(prompter)
     spokes = _ask_spokes(prompter) if profile_slug == "hub-and-spoke" else 3
     frontends = _ask_frontends(prompter) if profile_slug == "scaleout" else 1
@@ -174,6 +202,7 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     edge_role = _ask_edge_role(prompter, profile_slug)
     network_split = _ask_network_split(prompter, profile_slug)
     redundant_role = _ask_redundancy(prompter, profile_slug)
+    iiot, iiot_broker = _ask_iiot(prompter)
     disable_builtins = _ask_disable_builtins(prompter, db_kind)
     reverse_proxy = _ask_reverse_proxy(prompter)
 
@@ -187,6 +216,8 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
         database_kind=db_kind,
         redundant_role=redundant_role,
         disable_builtins=disable_builtins,
+        iiot=iiot,
+        iiot_broker=iiot_broker,
     )
 
     # Hub-and-spoke advisory: ask the user inside the wizard rather than
@@ -210,13 +241,54 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
         )
 
     summary = _summarize(config, profile_slug, options)
-    confirmed = _ask_summary_confirm(prompter, summary)
+    action = _ask_summary_action(prompter, summary)
+    if action == "tweak":
+        # Hand the built, resolved config to the composer pre-filled. Its summary
+        # loop takes over and produces the final config.
+        from ignition_stack import wizard_composer
+
+        result = wizard_composer.edit_loop(prompter, resolve(config), profile_slug, options)
+        return _outcome_from_composer(result)
     return WizardOutcome(
         config=config,
-        confirmed=confirmed,
+        confirmed=(action == "generate"),
         profile=profile_slug,
         options=options,
         summary_lines=summary,
+    )
+
+
+def _run_custom_track(name: str, prompter: Prompter) -> WizardOutcome:
+    """Build a bare topology preset, resolve it, and enter the composer."""
+    from ignition_stack import wizard_composer
+
+    profile_slug, options = _ask_topology_preset(prompter)
+    if profile_slug == "hub-and-spoke":
+        options = _confirm_advisory_if_needed(prompter, options)
+
+    try:
+        config = build_profile(profile_slug, name, options)
+    except ProfileError as exc:
+        return WizardOutcome(
+            config=ProjectConfig(name=name),
+            confirmed=False,
+            profile=profile_slug,
+            options=options,
+            summary_lines=[f"advisory: {exc}"],
+        )
+
+    result = wizard_composer.edit_loop(prompter, resolve(config), profile_slug, options)
+    return _outcome_from_composer(result)
+
+
+def _outcome_from_composer(result) -> WizardOutcome:
+    """Adapt a :class:`~ignition_stack.wizard_composer.ComposerResult`."""
+    return WizardOutcome(
+        config=result.config,
+        confirmed=result.confirmed,
+        profile=result.profile,
+        options=result.options,
+        summary_lines=result.summary_lines,
     )
 
 
@@ -225,9 +297,65 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
 # --------------------------------------------------------------------------- #
 
 
+def _ask_track(prompter: Prompter) -> str:
+    """The two-track gate (issue #43 phase 7): quick profile flow or custom composer."""
+    return prompter.select(
+        "How do you want to build?",
+        [
+            (_TRACK_QUICK, "Pick a profile and answer a few questions (recommended)"),
+            (_TRACK_CUSTOM, "Compose per-gateway services on a topology"),
+        ],
+        default=_TRACK_QUICK,
+    )
+
+
 def _ask_profile(prompter: Prompter) -> str:
     choices = [(p.slug, f"{p.slug:<14} - {p.summary}") for p in list_profiles()]
     return prompter.select("Architecture profile?", choices, default="standalone")
+
+
+def _ask_topology_preset(prompter: Prompter) -> tuple[str, ProfileOptions]:
+    """Pick the Custom track's starting topology + its count/edge/split/redundancy.
+
+    Reuses the Quick-track ``_ask_*`` helpers so the two tracks never drift on
+    what a profile's topology questions are. ``mcp-n8n`` is skipped - it is just
+    "standalone + n8n + MCP dropin", expressible by attaching n8n in the
+    composer. The preset is built with **no database and no services**
+    (``database_kind=None``): the composer is where the registry gets populated,
+    so it starts from a bare gateway skeleton.
+    """
+    choices = [(p.slug, f"{p.slug:<14} - {p.summary}") for p in list_profiles() if p.slug != "mcp-n8n"]
+    profile_slug = prompter.select("Starting topology (preset)?", choices, default="standalone")
+    spokes = _ask_spokes(prompter) if profile_slug == "hub-and-spoke" else 3
+    frontends = _ask_frontends(prompter) if profile_slug == "scaleout" else 1
+    edge_role = _ask_edge_role(prompter, profile_slug)
+    network_split = _ask_network_split(prompter, profile_slug)
+    redundant_role = _ask_redundancy(prompter, profile_slug)
+    options = ProfileOptions(
+        spokes=spokes,
+        frontends=frontends,
+        force=False,
+        edge_role=edge_role,
+        network_split=network_split,
+        database_kind=None,
+        redundant_role=redundant_role,
+    )
+    return profile_slug, options
+
+
+def _ask_iiot(prompter: Prompter) -> tuple[bool, str | None]:
+    """Whether to overlay the MQTT/Sparkplug pipeline, and which broker.
+
+    Default off. On "yes" a broker select defaults to chariot (Cirrus Link's own
+    broker, the most official pairing with Transmission/Engine) and lists every
+    ``mqtt-broker`` catalog kind. Returns ``(False, None)`` when declined.
+    """
+    if not prompter.confirm("Wire an MQTT pipeline (Cirrus Transmission/Engine + broker)?", default=False):
+        return False, None
+    from ignition_stack.wizard_composer import mqtt_broker_choices
+
+    broker = prompter.select("MQTT broker?", mqtt_broker_choices(), default="chariot")
+    return True, broker
 
 
 def _ask_spokes(prompter: Prompter) -> int:
@@ -396,6 +524,7 @@ def _summarize(config: ProjectConfig, profile_slug: str, options: ProfileOptions
         f"services     : {', '.join(config.services) if config.services else '(none)'}",
         f"network split: {'on' if config.network_split else 'off'}",
         "redundancy   : " + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
+        "iiot         : " + (f"{options.iiot_broker or 'chariot'} (Transmission/Engine overlay)" if options.iiot else "off"),
         "modules      : " + _enabled_modules_label(options.disable_builtins),
         "reverse proxy: " + (f"install Traefik at './{config.reverse_proxy.path}'" if config.reverse_proxy else "external (plain host-port mapping)"),
     ]
@@ -421,9 +550,23 @@ def _enabled_modules_label(disable_builtins: tuple[str, ...]) -> str:
     return ", ".join(kept) if kept else "(none - all built-ins disabled)"
 
 
-def _ask_summary_confirm(prompter: Prompter, summary: list[str]) -> bool:
+def _ask_summary_action(prompter: Prompter, summary: list[str]) -> str:
+    """The three-way summary gate: generate / tweak / cancel.
+
+    *generate* writes the project as-is (today's confirmed path); *tweak* hands
+    the built config to the Custom composer pre-filled; *cancel* aborts (the
+    CLI maps an unconfirmed outcome to exit 130).
+    """
     block = "\n".join(summary)
-    return prompter.confirm(f"Ready to generate?\n\n{block}\n", default=True)
+    return prompter.select(
+        f"Ready to generate?\n\n{block}\n",
+        [
+            ("generate", "Generate the project"),
+            ("tweak", "Tweak per-gateway services in the custom composer"),
+            ("cancel", "Cancel"),
+        ],
+        default="generate",
+    )
 
 
 # --------------------------------------------------------------------------- #
