@@ -209,14 +209,6 @@ def _validate_registry(config: ProjectConfig, catalog: dict[str, ServiceManifest
         raise ResolveError(f"only one mqtt-broker is supported per stack, but the registry has {len(brokers)} ({kinds}); multi-broker stacks are a non-goal")
 
 
-def _database_instance(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> ServiceInstance | None:
-    """The sole database-kind instance in the registry, or None."""
-    return next(
-        (inst for inst in config.service_instances if catalog[inst.service].kind == "database"),
-        None,
-    )
-
-
 def _expand_redundancy(config: ProjectConfig) -> None:
     """Expand each redundancy master into an explicit master + backup pair.
 
@@ -289,15 +281,38 @@ def _satisfy_required_capabilities(config: ProjectConfig, catalog: dict[str, Ser
         db_kind = _DEFAULT_DB_FOR_CAPABILITY.get(cap)
         if db_kind is None:
             raise ResolveError(f"required capability '{cap}' is provided by no selected service and cannot be auto-added")
-        existing = _database_instance(config, catalog)
-        if existing is not None:
-            raise ResolveError(
-                f"a '{existing.service}' database is selected, but capability "
-                f"'{cap}' needs a different database and only one database is "
-                "supported per stack; choose a compatible database"
-            )
-        config.service_instances.append(ServiceInstance(id="db", service=db_kind))
-        _attach_all_gateways(config, "db", catalog)
+        # Phase 2 allows multiple databases of distinct kinds, so an existing
+        # database that does NOT satisfy this capability (e.g. a Mongo store next
+        # to Keycloak's SQL requirement) no longer blocks the auto-add. A
+        # same-kind duplicate would have satisfied the capability above, so it
+        # never reaches this branch; _validate_registry still guards the bounds.
+        # The auto-added database satisfies a *service -> service* infra dep
+        # (Keycloak's backing store), so it is registry-level only: no gateway
+        # consumer attachment is fanned out. A gateway that wants to use this
+        # database as a historian must attach to it explicitly. This is what
+        # lets an Edge gateway run Keycloak SSO while never holding a DB
+        # connection (issue #43's "two kinds of dependency" split).
+        db_id = _free_database_id(config, db_kind)
+        config.service_instances.append(ServiceInstance(id=db_id, service=db_kind))
+
+
+def _free_database_id(config: ProjectConfig, db_kind: str) -> str:
+    """Pick the id for an auto-added database, preferring the historical ``db``.
+
+    Single-database stacks keep ``id="db"`` so the rendered service name matches
+    today's output exactly. When ``db`` is already taken (a hand-authored
+    instance named ``db`` of another kind), fall back to ``db-<kind>`` so the
+    auto-add never collides with the existing id.
+    """
+    taken = {inst.id for inst in config.service_instances}
+    if "db" not in taken:
+        return "db"
+    candidate = f"db-{db_kind}"
+    suffix = 2
+    while candidate in taken:
+        candidate = f"db-{db_kind}-{suffix}"
+        suffix += 1
+    return candidate
 
 
 def _capability_satisfied(cap: str, config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> bool:
@@ -313,8 +328,14 @@ def _capability_satisfied(cap: str, config: ProjectConfig, catalog: dict[str, Se
 def _apply_keycloak_database(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
     if not any(inst.service == "keycloak" for inst in config.service_instances):
         return
-    db = _database_instance(config, catalog)
-    if db is None or db.service not in _KEYCLOAK_SQL_KINDS:
+    # Keycloak's logical database lands on the SQL server it can actually use,
+    # not merely the first database in registry order: a heterogeneous stack may
+    # hold a Mongo store ahead of the SQL database Keycloak's requirement added.
+    db = next(
+        (inst for inst in config.service_instances if inst.service in _KEYCLOAK_SQL_KINDS),
+        None,
+    )
+    if db is None:
         return
     if "keycloak" not in db.extra_databases:
         db.extra_databases.append("keycloak")

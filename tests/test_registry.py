@@ -263,3 +263,27 @@ def test_v040_shaped_record_loads_and_resolves(tmp_path: Path) -> None:
     assert db is not None and db.id == "db"
     assert "keycloak" in db.extra_databases
     assert any(inst.service == "keycloak" for inst in resolved.service_instances)
+
+
+def test_extra_databases_env_follows_the_sql_instance_not_the_primary() -> None:
+    """EXTRA_DATABASES must ride whichever SQL instance carries extras.
+
+    In a heterogeneous stack a Mongo store can sit ahead of the SQL database
+    Keycloak's requirement auto-adds; the postgres fragment references
+    ``${EXTRA_DATABASES}``, so the key must exist even when the primary
+    (first) database is not the SQL one.
+    """
+    config = ProjectConfig(
+        name="hetero",
+        database=None,
+        service_instances=[
+            ServiceInstance(id="mongo-store", service="mongo"),
+            ServiceInstance(id="keycloak", service="keycloak"),
+        ],
+        gateways=[GatewayConfig(services=[ServiceAttachment(instance="mongo-store")])],
+    )
+    resolved = resolve(config)
+    primary = resolved.database_instance()
+    assert primary is not None and primary.service == "mongo"
+    env = _render_env(resolved)
+    assert "EXTRA_DATABASES=keycloak" in env

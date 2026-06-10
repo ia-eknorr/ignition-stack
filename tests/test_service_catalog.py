@@ -188,10 +188,26 @@ def test_keycloak_with_existing_postgres_reuses_it() -> None:
     assert "keycloak" in dbs[0].extra_databases
 
 
-def test_keycloak_with_mongo_only_is_a_conflict() -> None:
-    """Mongo can't satisfy Keycloak's sql-database need and we allow only one DB."""
-    with pytest.raises(ResolveError, match="needs a different database"):
-        resolve(ProjectConfig(name="kc", database=DatabaseConfig(kind="mongo"), services=["keycloak"]))
+def test_keycloak_with_mongo_coexists_with_an_auto_added_sql_database() -> None:
+    """Mongo can't satisfy Keycloak's sql-database need, so a SQL DB is auto-added.
+
+    Phase 2 relaxed the single-database rule to allow distinct kinds, so a Mongo
+    historian and the Postgres that backs Keycloak now coexist (issue #43's
+    heterogeneous model) instead of conflicting. The auto-added SQL database is a
+    registry-level dependency: it carries Keycloak's logical schema but attaches
+    to no gateway (the gateway uses Keycloak SSO, not the DB), while the Mongo it
+    was handed stays the gateway's one database connection.
+    """
+    resolved = resolve(ProjectConfig(name="kc", database=DatabaseConfig(kind="mongo"), services=["keycloak"]))
+    dbs = [inst for inst in resolved.service_instances if inst.is_database]
+    assert sorted(inst.service for inst in dbs) == ["mongo", "postgres"]
+    postgres = next(inst for inst in dbs if inst.service == "postgres")
+    assert "keycloak" in postgres.extra_databases
+    # The auto-added SQL database has no gateway attachment; the Mongo does.
+    for gw in resolved.gateways:
+        attached = {att.instance for att in gw.services}
+        assert postgres.id not in attached
+        assert any(att.instance == inst.id for inst in dbs if inst.service == "mongo" for att in gw.services)
 
 
 def test_mysql_attaches_jdbc_driver_to_every_gateway() -> None:

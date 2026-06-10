@@ -56,6 +56,13 @@ from ignition_stack.profiles import (
     get_profile,
     list_profiles,
 )
+from ignition_stack.profiles.carry import (
+    carry_registry,
+    database_carried_by_kind,
+    detect_iiot_broker,
+    is_default_representable,
+)
+from ignition_stack.services.loader import load_all_services
 from ignition_stack.services.resolver import resolve
 from ignition_stack.update_check import (
     check_for_update,
@@ -501,6 +508,15 @@ def switch_profile(
         console.print(f"[red]error[/red]: {exc}")
         raise typer.Exit(code=2) from exc
 
+    # Re-graft the richer registry shapes ProfileOptions can't express (custom
+    # ids, per-instance overrides, partial attachment sets, a second database),
+    # re-mapping their attachments by role and dropping any that the new topology
+    # can't host - each with a printed advisory. Resolve first so the profile's
+    # legacy database is already lowered into per-gateway attachments; the carry's
+    # one-database-per-gateway guard then sees them and won't over-attach. The
+    # carry's output is resolved again by regenerate (resolve is idempotent).
+    new_config = carry_registry(resolve(new_config), current, console)
+
     files = regenerate(project_dir, new_config)
     console.print(f"[green]switched[/green] {current.profile or 'custom'} -> {profile}")
     console.print(f"  {len(files)} file(s) regenerated")
@@ -535,18 +551,37 @@ def _options_from_config(config: ProjectConfig) -> ProfileOptions:
     disable_builtins = tuple(sorted(set.intersection(*disabled_sets))) if disabled_sets else ()
     # A recorded config is resolved: its database + services live in the
     # registry, not the legacy fields. Recover the profile inputs from the
-    # registry (sole DB instance's service slug; non-database instance slugs).
-    db_instance = config.database_instance()
+    # registry. The primary database rides database_kind (see below); the
+    # non-database instances that are default-representable ride `services`.
+    # IIoT intent is recovered from the attachment roles: a stack with any
+    # mqtt-transmission/mqtt-engine attachment was built with apply_iiot, so set
+    # iiot=True and the broker slug. build_profile re-runs the overlay in the new
+    # topology, re-mapping Transmission/Engine onto the new roles naturally; the
+    # broker instance is therefore excluded from `services` below to avoid a
+    # double-add. Anything richer than `services` can express (custom ids,
+    # per-instance overrides, partial/role-specific attachments, a second
+    # database) is carried after build_profile by carry_registry.
+    iiot_broker = detect_iiot_broker(config)
+    catalog = load_all_services()
+    representable = tuple(inst.service for inst in config.non_database_instances() if inst.service != iiot_broker and is_default_representable(inst, config, catalog))
+    # The primary database rides database_kind only when it has the clean
+    # canonical shape (id "db", default image/credentials, consumer on every
+    # non-Edge gateway). A custom primary database - or any second database - is
+    # left for carry_registry to re-graft, so database_kind stays None and the
+    # profile does not also lay down a colliding default DB.
+    carried_db = database_carried_by_kind(config, catalog)
     return ProfileOptions(
         spokes=spoke_count or 3,
         frontends=frontend_count or 1,
         edge_role=edge_roles[0] if edge_roles else "none",
         network_split=config.network_split,
         reverse_proxy=config.reverse_proxy,
-        database_kind=db_instance.service if db_instance is not None else None,
-        services=tuple(inst.service for inst in config.non_database_instances()),
+        database_kind=carried_db.service if carried_db is not None else None,
+        services=representable,
         redundant_role=redundant_role,
         disable_builtins=disable_builtins,
+        iiot=iiot_broker is not None,
+        iiot_broker=iiot_broker,
     )
 
 

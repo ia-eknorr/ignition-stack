@@ -324,8 +324,19 @@ def _render_env(config: ProjectConfig) -> str:
             f"DB_PASSWORD={db.password}",
             f"DB_HOST={db.id}",
         ]
-        if db.extra_databases and db.service in {"postgres", "mysql", "mariadb"}:
-            lines.append(f"EXTRA_DATABASES={','.join(db.extra_databases)}")
+    # EXTRA_DATABASES belongs to whichever SQL instance carries extras (only
+    # the resolver's keycloak pass sets them), which is not necessarily the
+    # primary: in a heterogeneous stack a Mongo store can sit ahead of the
+    # auto-added SQL database Keycloak wires to. Its compose fragment
+    # references ${EXTRA_DATABASES}, so the key must exist whenever any SQL
+    # instance has extras. At most one instance can: extras are keycloak-only
+    # and keycloak targets exactly one SQL database.
+    extras_db = next(
+        (inst for inst in config.database_instances() if inst.extra_databases and inst.service in {"postgres", "mysql", "mariadb"}),
+        None,
+    )
+    if extras_db is not None:
+        lines.append(f"EXTRA_DATABASES={','.join(extras_db.extra_databases)}")
 
     catalog = load_all_services()
     for inst in sorted(config.non_database_instances(), key=lambda i: i.id):

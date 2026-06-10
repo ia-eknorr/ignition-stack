@@ -49,6 +49,57 @@ error: invalid config in 'broken.yml':
   - database.kind: unsupported database kind 'oracle'; supported: mariadb, mongo, mysql, postgres
 ```
 
+## Heterogeneous stacks
+
+A profile gives every gateway the same services. The config file goes further: it carries a stack-level **service registry** (`service_instances`) and **per-gateway attachments** (each gateway's `services:` list), so different gateways can use different services, share one instance, or hold none at all.
+
+Each entry in `service_instances` is an addressable service keyed by `id` and backed by a catalog `service` slug. Each entry in a gateway's `services:` list names the instance it attaches to and the `role` it plays (`consumer` by default; `mqtt-transmission` / `mqtt-engine` for the IIoT pipeline). Sharing is just two gateways naming the same instance `id`.
+
+This stack runs a shared Keycloak across two standard gateways, gives the second its own Mongo, and runs an Edge gateway that publishes to a broker while holding no database:
+
+```yaml
+name: plant
+database: null
+gateways:
+  - name: gw1
+    role: hub
+    http_port: 9088
+    services:
+      - instance: emqx
+      - instance: keycloak
+  - name: gw2
+    role: hub
+    http_port: 9089
+    services:
+      - instance: keycloak     # the same instance gw1 uses
+      - instance: mongo1
+  - name: gw3
+    role: spoke
+    ignition_edition: edge
+    http_port: 9090
+    services:
+      - instance: emqx
+        role: mqtt-transmission # publishes Sparkplug; no database
+service_instances:
+  - id: emqx
+    service: emqx
+  - id: keycloak
+    service: keycloak
+  - id: mongo1
+    service: mongo
+```
+
+Two kinds of dependency resolve at different levels, which is what lets `gw3` use the broker without a database:
+
+- **Service to service.** Keycloak requires a SQL database, so the resolver auto-adds a Postgres instance and gives Keycloak its logical schema there. That Postgres is a registry-level dependency: it backs Keycloak but attaches to **no** gateway. An Edge gateway can use Keycloak SSO while never holding a database connection.
+- **Gateway to service.** A gateway only connects to a database when it explicitly attaches to one. `gw2` attaches to `mongo1`; `gw1` and `gw3` hold no database at all.
+
+Two rules bound the database side of a heterogeneous stack: multiple databases are allowed only when their kinds differ (the auto-added Postgres and `gw2`'s Mongo are fine), and a gateway may attach to at most one database. An Edge gateway may never attach to a database (the resolver rejects it).
+
+### Legacy shorthand still works
+
+The flat `services: ["keycloak", "hivemq"]` list and single `database:` block from earlier versions are still accepted as input shorthand. The resolver lowers them into the registry: each becomes a `ServiceInstance` plus a `consumer` attachment on every gateway, and the legacy fields are cleared. So a dumped config (and the [configuration record](../concepts/configuration-record.md)) always shows the registry form, even when the input used the shorthand. Dump a legacy-style config with `--dry-run` to see exactly what it lowers to.
+
 ## Authoring from scratch
 
 Because the format is the schema, an external tool - an architecture builder, a script, a templating step - can emit a config file and hand it to `ignition-stack -f` to materialize a stack, without driving the wizard. Dump a profile first to see the shape, then treat that as your starting template.
