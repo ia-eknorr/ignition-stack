@@ -24,6 +24,16 @@ Confirm it is on your path:
 ignition-stack --version
 ```
 
+## Staying up to date
+
+When a real command runs in an interactive terminal, `ignition-stack` prints a one-line notice if a newer release is on PyPI, with the upgrade command tailored to how you installed it — `pipx upgrade ignition-stack`, `uv tool upgrade ignition-stack`, or `pip install --upgrade ignition-stack`. It only notifies; it never installs anything or restarts a running command.
+
+The check is cached and runs at most once a day, uses a short network timeout so it never delays a command, and fails silently when you are offline. It is suppressed whenever output is not a terminal — scripts, pipes, and CI stay clean — and you can turn it off entirely:
+
+```sh
+export IGNITION_STACK_NO_UPDATE_CHECK=1
+```
+
 ## Shell completion
 
 Enable tab-completion for your shell once, then reload it:

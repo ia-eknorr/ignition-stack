@@ -85,6 +85,7 @@ const sidebars: SidebarsConfig = {
         "guides/reset-and-reshape",
         "guides/declarative-config",
         "guides/redundancy",
+        "guides/disable-builtins",
         "guides/teardown",
       ],
     },

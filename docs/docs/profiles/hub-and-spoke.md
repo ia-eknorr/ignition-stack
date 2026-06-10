@@ -21,7 +21,7 @@ One central hub gateway plus N spoke gateways. Spokes are lightweight and deploy
 | Gateways | 1 hub + N spokes |
 | Default database | [Postgres](../services/postgres.md) |
 | Network split | off (hub-and-spoke is typically single-tier) |
-| Edition | spokes run Edge by default; override with `--edge-role` |
+| Edition | spokes run Edge by default; the hub is always standard |
 
 Each spoke gets its own host port, stepping up from 9089, so you can open any gateway directly from your laptop.
 
@@ -43,6 +43,16 @@ ignition-stack init big-demo --profile hub-and-spoke --spokes 12 --force
 ```
 
 The second command crosses the red tier, so `--force` is required to proceed non-interactively.
+
+## Gateway network
+
+Each spoke is joined to the hub over Ignition's Gateway Network, and the link auto-forms on first boot with no UI approval. Every spoke opens a plain (non-SSL, port 8088) outgoing connection to the `hub`, and each gateway runs an `Unrestricted` incoming policy so the connection is accepted on sight. The generated `POST-SETUP.md` carries a *verification* readout — naming both ends of each link — rather than a manual approval step.
+
+Plain transport is a deliberate demo-only default. For a cross-host or production deployment, switch to SSL on port 8060 with approved certificates, which reintroduces a one-time cert-approval step; the [redundancy guide](../guides/redundancy.md#security-plain-transport-is-demo-only) walks through that variant.
+
+## Editions
+
+Spokes default to Edge; pass `--edge-role none` to run them as standard instead. The hub is always standard and cannot be made Edge: the spokes aggregate _into_ it, and Edge is a leaf edition that can't be an aggregation target.
 
 ## When to use it
 

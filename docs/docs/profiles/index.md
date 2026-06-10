@@ -12,7 +12,7 @@ A profile is the high-level shape of a stack: how many gateways, in what roles, 
 | Profile | Gateways | Network split | Edge default | Use it for |
 | --- | --- | --- | --- | --- |
 | [standalone](./standalone.md) | 1 | off | none | The default starter stack: one gateway + a database |
-| [scaleout](./scaleout.md) | 2 (frontend + backend) | on | frontend | A two-tier frontend/backend demo |
+| [scaleout](./scaleout.md) | 2 (frontend + backend) | on | none | A two-tier frontend/backend demo |
 | [hub-and-spoke](./hub-and-spoke.md) | 1 hub + N spokes | off | spokes | A central hub aggregating many edge sites |
 | [mcp-n8n](./mcp-n8n.md) | 1 + n8n | off | none | AI-driven automation with the EA MCP module |
 

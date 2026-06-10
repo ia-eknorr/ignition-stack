@@ -41,6 +41,8 @@ The recommended setup, and what `ignition-stack` generates:
 2. Emit `ACCEPT_MODULE_LICENSES` and `ACCEPT_MODULE_CERTS` listing every bundled third-party module's identifier.
 3. Omit `GATEWAY_MODULES_ENABLED` so the built-in IA modules keep running. Enumerate every required built-in identifier alongside the third-party ones only if you genuinely need strict whitelisting.
 
+To turn a built-in module *off* without hand-writing the whitelist, see [Disable built-in modules](../guides/disable-builtins.md) — it expresses the intent as a blocklist and inverts it into this variable for you.
+
 Each `modules.yaml` catalog entry exposes its fully-qualified identifier so the compose engine can build the two accept-var lists deterministically.
 
 ## Matrix
