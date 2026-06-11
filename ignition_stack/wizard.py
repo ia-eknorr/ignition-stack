@@ -596,7 +596,13 @@ class QuestionaryPrompter:
         # Questionary matches `default` against choice values, not titles, so
         # pass the slug straight through (or None when it isn't a real choice).
         default_value = default if any(value == default for value, _ in choices) else None
-        answer = questionary.select(message, choices=q_choices, default=default_value).unsafe_ask()
+        # instruction=" " (single space) is truthy so questionary uses it
+        # verbatim instead of falling back to "(Use arrow keys)". A space
+        # renders as nothing visible. Arrow keys, j/k, and emacs keys remain
+        # active via their defaults (use_jk_keys=True, use_emacs_keys=True).
+        # use_search_filter is intentionally left False: questionary raises
+        # ValueError when use_jk_keys and use_search_filter are both True.
+        answer = questionary.select(message, choices=q_choices, default=default_value, instruction=" ").unsafe_ask()
         return str(answer)
 
     def text(self, message: str, default: str = "") -> str:
@@ -629,6 +635,11 @@ class QuestionaryPrompter:
         import questionary
 
         q_choices = [questionary.Choice(title=label, value=value, checked=checked) for value, label, checked in choices]
-        answer = questionary.checkbox(message, choices=q_choices).unsafe_ask()
+        # Replace the long default instruction with a single terse hint.
+        # Space-to-toggle is the only non-obvious binding; enter-to-confirm
+        # and arrow navigation need no explanation.
+        # checkbox uses `if instruction is not None` so instruction="" also
+        # works, but an explicit descriptive string is more helpful.
+        answer = questionary.checkbox(message, choices=q_choices, instruction="(space to toggle)").unsafe_ask()
         # Questionary returns None on Ctrl-C and a list otherwise; normalize.
         return [str(a) for a in (answer or [])]
