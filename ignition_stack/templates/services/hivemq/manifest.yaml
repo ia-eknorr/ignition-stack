@@ -22,6 +22,11 @@ wires:
     transmission_module: mqtt-transmission
     engine_module: mqtt-engine
     port: 1883
+connection:
+  in_network: "tcp://{id}:1883"
+  host_port_env: HIVEMQ_MQTT_PORT
+  credential_env: []
+  note: "HiveMQ CE allows anonymous MQTT connections; no credentials required."
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

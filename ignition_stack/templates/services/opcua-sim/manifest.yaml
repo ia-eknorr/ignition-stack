@@ -13,6 +13,11 @@ requires: []
 env:
   OPCUA_SIM_PORT: "50000"
 seeds_gateway_resources: false
+connection:
+  in_network: "opc.tcp://{id}:50000"
+  host_port_env: OPCUA_SIM_PORT
+  credential_env: []
+  note: "Anonymous, unsecured transport (`--autoaccept --unsecuretransport` flags)."
 post_setup:
   - connection: opc-ua-connection
     reason: >-

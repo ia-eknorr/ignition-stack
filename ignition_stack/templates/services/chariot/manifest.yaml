@@ -25,6 +25,21 @@ wires:
     transmission_module: mqtt-transmission
     engine_module: mqtt-engine
     port: 1883
+connection:
+  # In-network MQTT is always 1883 (Sparkplug port); CHARIOT_MQTT_PORT is the
+  # host mapping. The web admin UI (commissioning/mgmt) listens on 8080 in-container.
+  in_network: "tcp://{id}:1883"
+  host_port_env: CHARIOT_MQTT_PORT
+  credential_env:
+    - CHARIOT_ADMIN_PASSWORD
+  # Chariot quirk (verified live 2026-06-11; see compose/writer.py): the image
+  # auto-seeds MQTT user admin/changeme with full ACL, INDEPENDENT of
+  # CHARIOT_ADMIN_PASSWORD, which only sets the web admin UI password. No env
+  # var changes the MQTT password.
+  note: >-
+    MQTT clients authenticate as `admin` / `changeme` (auto-seeded by the
+    image; `CHARIOT_ADMIN_PASSWORD` only sets the web admin UI password).
+    Web admin UI: `http://{id}:8080` (host: `localhost:CHARIOT_HTTP_PORT`).
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **POST-SETUP.md now ends with a Connections reference section.** Every
+  service in the stack — gateways, attached databases and services, and flat
+  (unattached) instances — gets one row listing its in-network address (what a
+  sibling container uses), its host-access URL or port, and its credentials as
+  env-var sources with defaults (e.g. `` `DB_PASSWORD` in `.env` (default:
+  `ignition`) ``). Proxy mode shows the `*.localtest.me` URL for gateway rows;
+  ports mode shows `localhost:<PORT>`. The Chariot MQTT quirk (MQTT user
+  `admin/changeme`, decoupled from `ADMIN_PASSWORD`) is called out as a note on
+  that service's row. Each service manifest gains an optional `connection:` block
+  (`in_network`, `host_port_env`, `credential_env`, `note`) so adding a new
+  service only requires a manifest entry, no generator code changes.
 - **Wizard progress breadcrumb.** A one-line `[N/M] label › label › …`
   header is printed above each prompt so users know their position in the
   flow and how many questions remain. The counter and total are computed from

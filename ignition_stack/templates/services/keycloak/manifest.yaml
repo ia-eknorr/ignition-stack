@@ -20,6 +20,15 @@ seeds_gateway_resources: true
 # and the shared realm seed. Keycloak may run alongside an Edge gateway via SSO,
 # so it sets no never_on_edge placement (only its database does).
 singleton: true
+connection:
+  # Keycloak listens on 8080 in-container; the OIDC issuer URL for the gateway
+  # is http://<id>:8080/realms/<realm>. The admin console is the same base URL.
+  in_network: "http://{id}:8080"
+  host_port_env: KEYCLOAK_HTTP_PORT
+  credential_env:
+    - KEYCLOAK_ADMIN_USER
+    - KEYCLOAK_ADMIN_PASSWORD
+  note: "OIDC issuer (in-network): `http://{id}:8080/realms/master`."
 post_setup:
   - connection: identity-provider
     reason: >-

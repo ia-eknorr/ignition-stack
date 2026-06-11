@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # A service either lives on the user-facing ``frontend`` network or the private
 # ``backend`` network when ``network_split`` is on. Databases, brokers, IDPs,
@@ -42,6 +42,61 @@ ServiceKind = Literal[
     "streaming",
     "automation",
 ]
+
+
+class ConnectionSpec(BaseModel):
+    """In-network and host-access metadata for the Connections reference section.
+
+    Added in issue #68 (Phase C of epic #66). Every catalog service carries one
+    optional ``connection`` block; the generator builds the POST-SETUP.md
+    Connections section entirely from these blocks — no code change is needed
+    when a new service is added, only a ``connection:`` entry in its manifest.
+
+    Fields:
+
+    - ``in_network`` — the URI template a sibling container uses to reach this
+      service, e.g. ``jdbc:postgresql://{id}:5432/{db_user}`` for Postgres.
+      ``{id}`` is replaced with the resolved instance id, ``{db_user}`` with the
+      database user. Rendered as-is when no placeholders are present.
+    - ``host_port_env`` — the ``.env`` key that maps the container port to a host
+      port (e.g. ``CHARIOT_HTTP_PORT``). When set, the host-access line reads
+      ``localhost:<DEFAULT>`` and the default is pulled from the manifest's env
+      map. Omit for non-HTTP services that only expose a single port via the
+      ``*_PORT`` env key (those get the same treatment automatically from the
+      service's env map).
+    - ``credential_env`` — list of ``.env`` keys carrying login credentials for
+      this connection (e.g. ``["KEYCLOAK_ADMIN_USER", "KEYCLOAK_ADMIN_PASSWORD"]``).
+      The generator formats each as ``<key> (default: <value>)``.
+    - ``note`` — a short freeform note appended to the credentials line (e.g. the
+      Chariot MQTT quirk about the hardcoded ``admin/changeme`` user). Markdown
+      is OK; keep it to one sentence.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    in_network: str = Field(
+        min_length=1,
+        description="In-network URI template (use {id} for the instance id, {db_user} for the db user).",
+    )
+    host_port_env: str = Field(
+        default="",
+        description=".env key for the host-mapped port; empty when no host port is published.",
+    )
+    credential_env: list[str] = Field(
+        default_factory=list,
+        description=".env keys for credentials (username + password) for this service.",
+    )
+    note: str = Field(
+        default="",
+        description="One-sentence note appended after credentials (Markdown OK).",
+    )
+
+    @model_validator(mode="after")
+    def _non_empty_credential_keys(self) -> ConnectionSpec:
+        for key in self.credential_env:
+            if not key.strip():
+                raise ValueError("credential_env entries must be non-empty strings")
+        return self
 
 
 class PostSetupItem(BaseModel):
@@ -192,6 +247,15 @@ class ServiceManifest(BaseModel):
     wires: WiresSpec | None = Field(
         default=None,
         description=("Enumerable wiring vocabulary (Phase 2 models it, Phase 3's IIoT overlay consumes it). Today only brokers carry a wires.mqtt block."),
+    )
+    connection: ConnectionSpec | None = Field(
+        default=None,
+        description=(
+            "In-network / host-access metadata for the POST-SETUP.md Connections "
+            "reference section (Phase C, issue #68). None for services the "
+            "generator skips (rare; prefer an explicit block over omission so the "
+            "Connections section is always complete)."
+        ),
     )
     post_setup: list[PostSetupItem] = Field(
         default_factory=list,

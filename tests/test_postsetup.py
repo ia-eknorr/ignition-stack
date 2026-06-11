@@ -16,7 +16,8 @@ from pathlib import Path
 
 from ignition_stack.architectures import ArchOptions, build_architecture
 from ignition_stack.compose import write_project
-from ignition_stack.config import ProjectConfig
+from ignition_stack.config import ProjectConfig, ReverseProxyConfig, ServiceAttachment, ServiceInstance
+from ignition_stack.config.schema import GatewayConfig
 from ignition_stack.postsetup import generate_post_setup
 from ignition_stack.services.resolver import resolve
 
@@ -27,11 +28,18 @@ def _resolved(**kwargs: object) -> ProjectConfig:
 
 
 def test_fully_seedable_stack_states_no_manual_steps() -> None:
-    """Standalone + Postgres seeds everything; the doc must say so and list no steps."""
+    """Standalone + Postgres seeds everything; the doc must say so and list no steps.
+
+    The Connections reference section is always appended (issue #68), so the
+    body now contains ``## Connections reference`` even for fully-seedable stacks.
+    The test only asserts no *manual-step* ``## `` heading appears before the
+    connections divider (``---``).
+    """
     body = generate_post_setup(_resolved(name="demo"))
     assert "no manual steps required" in body.lower()
-    # No "## " heading means no per-step sections were emitted.
-    assert "## " not in body
+    # The body before the connections divider must carry no ## heading.
+    pre_connections = body.split("---", 1)[0]
+    assert "## " not in pre_connections
 
 
 def test_manual_secret_connection_carries_url_screen_and_env_var() -> None:
@@ -74,10 +82,16 @@ def test_identity_provider_step_is_a_verification_not_a_paste() -> None:
 
 
 def test_one_section_per_deferred_connection() -> None:
-    """Each service with a post_setup item contributes exactly one heading."""
+    """Each service with a post_setup item contributes exactly one heading.
+
+    The Connections reference section (issue #68) adds one additional ``## ``
+    heading after the ``---`` divider, so we count only those before the divider.
+    """
     body = generate_post_setup(_resolved(name="demo", services=["chariot", "opcua-sim", "modbus-sim", "kafka"]))
+    # Count manual-step headings only (before the connections divider).
+    pre_connections = body.split("---", 1)[0]
     # Four services, each declaring one deferred connection -> four sections.
-    assert body.count("\n## ") == 4
+    assert pre_connections.count("\n## ") == 4
 
 
 def test_writer_writes_post_setup_with_manual_step(tmp_path: Path) -> None:
@@ -154,3 +168,112 @@ def test_iiot_unverified_broker_keeps_manual_procedure() -> None:
     assert "set by hand" in body
     assert "Group ID = `plant`" in body
     assert "tcp://emqx:1883" in body
+
+
+# --------------------------------------------------------------------------- #
+# Connections reference section (issue #68 Phase C)
+# --------------------------------------------------------------------------- #
+
+
+def _connections(body: str) -> str:
+    """Extract the Connections section from a POST-SETUP.md body."""
+    return body.split("---", 1)[1] if "---" in body else ""
+
+
+def test_connections_section_always_present() -> None:
+    """The Connections reference section appears in all POST-SETUP.md outputs."""
+    # Fully-seedable stack (no manual steps).
+    seedable = generate_post_setup(_resolved(name="demo"))
+    assert "## Connections reference" in seedable
+
+    # Stack with deferred steps.
+    with_steps = generate_post_setup(_resolved(name="demo", services=["chariot"]))
+    assert "## Connections reference" in with_steps
+
+
+def test_connections_section_lists_gateways() -> None:
+    """Each gateway in the stack has a row with its web UI URL."""
+    body = generate_post_setup(_resolved(name="demo"))
+    conn = _connections(body)
+    # Single gateway: label is just "gateway"
+    assert "### gateway" in conn
+    assert "http://gateway:8088" in conn
+    assert "http://localhost:9088" in conn
+
+
+def test_connections_section_postgres_exact_strings() -> None:
+    """Postgres connection strings and credentials are exact."""
+    body = generate_post_setup(_resolved(name="demo"))
+    conn = _connections(body)
+    assert "jdbc:postgresql://db:5432/ignition" in conn
+    assert "`DB_USER` in `.env` (default: `ignition`)" in conn
+    assert "`DB_PASSWORD` in `.env` (default: `ignition`)" in conn
+
+
+def test_connections_section_chariot_exact_strings() -> None:
+    """Chariot MQTT connection string, credentials, and quirk note are exact."""
+    body = generate_post_setup(_resolved(name="demo", services=["chariot"]))
+    conn = _connections(body)
+    assert "tcp://chariot:1883" in conn
+    assert "`CHARIOT_ADMIN_PASSWORD` in `.env` (default: `password`)" in conn
+    # The Chariot quirk must be stated correctly: MQTT auth is the image-seeded
+    # admin/changeme, NOT CHARIOT_ADMIN_PASSWORD (web admin UI only).
+    assert "`admin` / `changeme`" in conn
+    assert "only sets the web admin UI password" in conn
+
+
+def test_connections_section_keycloak_exact_strings() -> None:
+    """Keycloak in-network URI and host-access URL are exact."""
+    body = generate_post_setup(_resolved(name="demo", services=["keycloak"]))
+    conn = _connections(body)
+    assert "http://keycloak:8080" in conn
+    assert "localhost:8081" in conn
+    assert "`KEYCLOAK_ADMIN_USER` in `.env` (default: `admin`)" in conn
+    assert "`KEYCLOAK_ADMIN_PASSWORD` in `.env` (default: `admin`)" in conn
+
+
+def test_connections_section_proxy_mode_gateway_url() -> None:
+    """In proxy mode the gateway row shows the localtest.me URL, not localhost:PORT."""
+    config = resolve(ProjectConfig(name="demo", reverse_proxy=ReverseProxyConfig(mode="external")))
+    body = generate_post_setup(config)
+    conn = _connections(body)
+    assert "http://demo.localtest.me" in conn
+    # The plain host:port must NOT appear for a proxied gateway.
+    assert "localhost:9088" not in conn
+
+
+def test_connections_section_flat_broker_uses_instance_id() -> None:
+    """A flat (unattached) broker row uses its instance id, not the manifest slug."""
+    config = resolve(
+        ProjectConfig(
+            name="demo",
+            service_instances=[
+                ServiceInstance(id="db", service="postgres"),
+                ServiceInstance(id="mqtt", service="chariot"),
+            ],
+            gateways=[GatewayConfig(name="gateway", services=[ServiceAttachment(instance="db")])],
+        )
+    )
+    body = generate_post_setup(config)
+    conn = _connections(body)
+    # The flat instance id "mqtt" appears in the in-network address.
+    assert "tcp://mqtt:1883" in conn
+    # Label includes the slug + the custom id.
+    assert "chariot (mqtt)" in conn
+
+
+def test_connections_section_attached_and_flat_both_appear() -> None:
+    """Both attached (wired) and flat (unattached) services appear in Connections."""
+    config = resolve(
+        ProjectConfig(
+            name="demo",
+            service_instances=[
+                ServiceInstance(id="db", service="postgres"),
+                ServiceInstance(id="flat-db", service="postgres"),
+            ],
+        )
+    )
+    body = generate_post_setup(config)
+    conn = _connections(body)
+    assert "jdbc:postgresql://db:5432/ignition" in conn
+    assert "jdbc:postgresql://flat-db:5432/ignition" in conn

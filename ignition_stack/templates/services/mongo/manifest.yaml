@@ -18,4 +18,10 @@ singleton: true
 singleton_scope: attached
 placement:
   never_on_edge: true
+connection:
+  in_network: "mongodb://{id}:27017"
+  host_port_env: ""
+  credential_env:
+    - DB_USER
+    - DB_PASSWORD
 post_setup: []

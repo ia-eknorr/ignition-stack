@@ -26,6 +26,13 @@ wires:
     transmission_module: mqtt-transmission
     engine_module: mqtt-engine
     port: 1883
+connection:
+  in_network: "tcp://{id}:1883"
+  host_port_env: RABBITMQ_MQTT_PORT
+  credential_env:
+    - RABBITMQ_USER
+    - RABBITMQ_PASSWORD
+  note: "Management UI: `http://{id}:15672` (host: `localhost:RABBITMQ_MGMT_PORT`)."
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-
