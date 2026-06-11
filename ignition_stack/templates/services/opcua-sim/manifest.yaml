@@ -3,7 +3,7 @@
 # endpoint suitable for demos.
 name: opcua-sim
 kind: simulator
-summary: Microsoft OPC-PLC OPC-UA simulation server.
+summary: Microsoft OPC-PLC OPC-UA simulation server
 image: mcr.microsoft.com/iotedge/opc-plc:2.9.9
 image_env: OPCUA_SIM_IMAGE
 network: backend

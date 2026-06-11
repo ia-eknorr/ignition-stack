@@ -2,7 +2,7 @@
 # holding/input registers over Modbus TCP for driver demos.
 name: modbus-sim
 kind: simulator
-summary: Modbus TCP simulation server for the gateway Modbus driver.
+summary: Modbus TCP simulation server for the gateway Modbus driver
 image: oitc/modbus-server:2.2.0
 image_env: MODBUS_SIM_IMAGE
 network: backend

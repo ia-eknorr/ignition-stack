@@ -2,7 +2,7 @@
 # Kafka connector / Event Streams modules (no third-party .modl needed).
 name: kafka
 kind: streaming
-summary: Single-node Kafka broker (KRaft mode) for Event Streams demos.
+summary: Single-node Kafka (KRaft mode) for Event Streams demos
 image: confluentinc/cp-kafka:8.2.1
 image_env: KAFKA_IMAGE
 network: backend

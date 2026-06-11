@@ -2,7 +2,7 @@
 # plugin so it can act as an MQTT broker alongside AMQP.
 name: rabbitmq
 kind: mqtt-broker
-summary: RabbitMQ broker with the MQTT plugin and management UI enabled.
+summary: RabbitMQ with MQTT plugin and management UI
 image: rabbitmq:4.3.1-management
 image_env: RABBITMQ_IMAGE
 network: backend

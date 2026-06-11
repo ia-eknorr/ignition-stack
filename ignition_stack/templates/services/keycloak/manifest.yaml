@@ -3,7 +3,7 @@
 # "keycloak" logical database) when none is selected.
 name: keycloak
 kind: idp
-summary: Keycloak identity provider for gateway OIDC/SAML single sign-on.
+summary: Keycloak identity provider for gateway OIDC/SAML single sign-on
 image: quay.io/keycloak/keycloak:26.6.2
 image_env: KEYCLOAK_IMAGE
 network: backend

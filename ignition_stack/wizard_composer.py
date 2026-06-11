@@ -53,7 +53,7 @@ console = Console()
 _BROKER_ROLE_CHOICES: list[tuple[str, str]] = [
     ("mqtt-transmission", "MQTT Transmission (edge gateway publishes Sparkplug)"),
     ("mqtt-engine", "MQTT Engine (central gateway subscribes/aggregates)"),
-    ("consumer", "consumer (plain reference)"),
+    ("consumer", "Consumer"),
 ]
 
 # The edit-loop menu. Order is the natural build flow: shape services, then
@@ -65,7 +65,7 @@ _ACTIONS: list[tuple[str, str]] = [
     ("remove", "Remove an attachment"),
     ("modules", "Set a gateway's enabled modules"),
     ("edition", "Set a gateway's edition (standard / edge)"),
-    ("iiot", "Wire or unwire the MQTT (IIoT) pipeline"),
+    ("iiot", "Add or remove IIoT (MQTT/Sparkplug)"),
     ("rename", "Rename an instance"),
     ("done", "Done - review and generate"),
 ]
@@ -277,7 +277,7 @@ def _action_modules(prompter: Prompter, working: ProjectConfig) -> ProjectConfig
     if gw is None:
         return working
     choices = module_choices_for_gateway(working, gw)
-    chosen = set(prompter.checkbox(f"Modules to ENABLE on '{gw.name}' (space toggles, enter confirms):", choices))
+    chosen = set(prompter.checkbox(f"Modules to enable on '{gw.name}':", choices))
     all_slugs = default_builtin_catalog().slugs
     disable = sorted(all_slugs - chosen)
 
@@ -312,7 +312,7 @@ def _action_iiot(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
         if not prompter.confirm(f"Unwire the MQTT pipeline (broker '{brokers[0].id}')?", default=False):
             return working
         return _try_mutate(working, lambda c: _unwire_iiot(c, catalog))
-    broker = prompter.select("MQTT broker to wire?", mqtt_broker_choices(catalog), default="chariot")
+    broker = prompter.select("MQTT broker?", mqtt_broker_choices(catalog), default="chariot")
     return _try_mutate(working, lambda c: apply_iiot(c, broker))
 
 

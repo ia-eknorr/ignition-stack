@@ -31,10 +31,9 @@ Quick-track step order:
 6. **Redundancy** - for profiles with a single workhorse role (standalone
    gateway, scaleout backend, hub-and-spoke hub), whether to add a backup
    node and form a master/backup pair. Defaults off.
-7. **IIoT** - whether to overlay an MQTT/Sparkplug pipeline (Cirrus
-   Transmission/Engine + a broker). Default no; on "yes" a broker select
-   defaults to chariot. Wires Transmission to edge-side roles and Engine to
-   central roles via ``apply_iiot``.
+7. **IIoT** - whether to add an IIoT (MQTT/Sparkplug) pipeline. Default no;
+   on "yes" a broker select defaults to chariot. Wires Cirrus Transmission to
+   edge-side roles and Engine to central roles via ``apply_iiot``.
 8. **Modules** - opt-in selection of built-in IA modules. A curated default
    set (Perspective, OPC-UA, SQL Bridge, the historian pair, Alarm
    Notification, Reporting) plus the JDBC driver matching the chosen database
@@ -73,11 +72,11 @@ _TRACK_CUSTOM = "custom"
 
 # Database options shown in the wizard, in the order they appear on screen.
 _DB_CHOICES: list[tuple[str, str]] = [
-    ("postgres", "Postgres (recommended)"),
+    ("postgres", "PostgreSQL"),
     ("mysql", "MySQL"),
     ("mariadb", "MariaDB"),
     ("mongo", "MongoDB"),
-    ("none", "No database (gateway-only stack)"),
+    ("none", "None"),
 ]
 
 # Per-profile default edge-role proposal. The wizard offers this as the
@@ -302,8 +301,8 @@ def _ask_track(prompter: Prompter) -> str:
     return prompter.select(
         "How do you want to build?",
         [
-            (_TRACK_QUICK, "Pick a profile and answer a few questions (recommended)"),
-            (_TRACK_CUSTOM, "Compose per-gateway services on a topology"),
+            (_TRACK_QUICK, "Quick — profile flow"),
+            (_TRACK_CUSTOM, "Custom — compose services per gateway"),
         ],
         default=_TRACK_QUICK,
     )
@@ -350,7 +349,7 @@ def _ask_iiot(prompter: Prompter) -> tuple[bool, str | None]:
     broker, the most official pairing with Transmission/Engine) and lists every
     ``mqtt-broker`` catalog kind. Returns ``(False, None)`` when declined.
     """
-    if not prompter.confirm("Wire an MQTT pipeline (Cirrus Transmission/Engine + broker)?", default=False):
+    if not prompter.confirm("Add IIoT (MQTT/Sparkplug)?", default=False):
         return False, None
     from ignition_stack.wizard_composer import mqtt_broker_choices
 
@@ -389,7 +388,7 @@ def _ask_redundancy(prompter: Prompter, profile_slug: str) -> str | None:
     if role is None:
         return None
     make = prompter.confirm(
-        f"Make the {role} gateway redundant (adds a backup node, master/backup pair)?",
+        f"Enable redundancy for the {role} gateway?",
         default=False,
     )
     return role if make else None
@@ -424,7 +423,7 @@ def _ask_disable_builtins(prompter: Prompter, db_kind: str | None) -> tuple[str,
         return tuple(sorted(all_slugs - prechecked))
 
     choices = [(m.slug, m.name, m.slug in prechecked) for m in sorted(catalog.modules, key=lambda m: m.name.lower())]
-    chosen = set(prompter.checkbox("Select modules to ENABLE (space toggles, enter confirms):", choices))
+    chosen = set(prompter.checkbox("Modules to enable:", choices))
     return tuple(sorted(all_slugs - chosen))
 
 
@@ -453,8 +452,8 @@ def _edition_choices_for(profile_slug: str) -> list[tuple[str, str]]:
     if profile_slug == "hub-and-spoke":
         return [
             ("none", "All gateways run standard"),
-            ("spoke", "All spokes run Edge (recommended for hub-and-spoke)"),
-            ("hub", "Hub runs Edge (unusual; spokes stay standard)"),
+            ("spoke", "All spokes run Edge"),
+            ("hub", "Hub runs Edge"),
         ]
     # standalone / mcp-n8n: single gateway
     return [
@@ -467,9 +466,9 @@ def _ask_reverse_proxy(prompter: Prompter) -> ReverseProxyConfig | None:
     choice = prompter.select(
         "Reverse proxy?",
         [
-            ("external", "I already run one (Traefik, nginx, ...): plain host-port mapping"),
+            ("external", "Use an existing reverse proxy"),
             ("install", "Install ia-eknorr/traefik-reverse-proxy"),
-            ("skip", "Skip - the gateway is exposed directly on a host port"),
+            ("skip", "Skip — exposed directly on a host port"),
         ],
         default="external",
     )

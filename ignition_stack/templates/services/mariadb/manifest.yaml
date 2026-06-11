@@ -2,7 +2,7 @@
 # config built in, so no external JDBC driver is attached.
 name: mariadb
 kind: database
-summary: MariaDB database (MySQL-compatible), driver built into Ignition.
+summary: MariaDB database (MySQL-compatible), driver built into Ignition
 image: mariadb:11
 image_env: MARIADB_IMAGE
 network: backend

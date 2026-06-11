@@ -2,7 +2,7 @@
 # NoSQL backend. Not a SQL database, so it does not satisfy Keycloak.
 name: mongo
 kind: database
-summary: MongoDB document store for NoSQL demos.
+summary: MongoDB document store for NoSQL demos
 image: mongo:7
 image_env: MONGO_IMAGE
 network: backend

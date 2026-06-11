@@ -1,7 +1,7 @@
 # EMQX - MQTT broker with a web dashboard.
 name: emqx
 kind: mqtt-broker
-summary: EMQX MQTT broker with management dashboard.
+summary: EMQX with management dashboard
 image: emqx/emqx:6.2.0
 image_env: EMQX_IMAGE
 network: backend

@@ -2,7 +2,7 @@
 # demos. Web UI + MQTT, commissioned from env on first boot.
 name: chariot
 kind: mqtt-broker
-summary: Cirrus Link Chariot MQTT broker (Sparkplug-aware, web UI).
+summary: Cirrus Link Chariot (Sparkplug-native broker)
 image: cirruslink/chariot:3.0.0
 image_env: CHARIOT_IMAGE
 network: backend

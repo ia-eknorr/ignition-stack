@@ -1,7 +1,7 @@
 # HiveMQ CE - lightweight MQTT broker, anonymous access by default.
 name: hivemq
 kind: mqtt-broker
-summary: HiveMQ Community Edition MQTT broker.
+summary: HiveMQ Community Edition
 image: hivemq/hivemq-ce:2025.5
 image_env: HIVEMQ_IMAGE
 network: backend
