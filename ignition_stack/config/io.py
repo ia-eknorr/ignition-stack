@@ -84,17 +84,12 @@ def load_config(path: Path) -> ProjectConfig:
 
     data = _parse(text, path)
     if not isinstance(data, dict):
-        raise ConfigIOError(
-            f"config file '{path}' must contain a mapping at the top level, "
-            f"got {type(data).__name__}"
-        )
+        raise ConfigIOError(f"config file '{path}' must contain a mapping at the top level, " f"got {type(data).__name__}")
 
     try:
         return ProjectConfig.model_validate(data)
     except ValidationError as exc:
-        raise ConfigIOError(
-            f"invalid config in '{path}':\n{_format_validation_error(exc)}"
-        ) from exc
+        raise ConfigIOError(f"invalid config in '{path}':\n{_format_validation_error(exc)}") from exc
 
 
 def _parse(text: str, path: Path) -> object:

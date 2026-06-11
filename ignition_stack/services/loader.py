@@ -44,9 +44,7 @@ def load_service(name: str) -> ServiceManifest:
     except ValidationError as exc:
         raise ServiceLoadError(f"service '{name}' manifest failed validation:\n{exc}") from exc
     if manifest.name != name:
-        raise ServiceLoadError(
-            f"service '{name}' manifest declares name '{manifest.name}'; they must match."
-        )
+        raise ServiceLoadError(f"service '{name}' manifest declares name '{manifest.name}'; they must match.")
     return manifest
 
 

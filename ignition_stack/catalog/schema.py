@@ -65,35 +65,24 @@ class _EntryBase(BaseModel):
         str,
         Field(
             pattern=rf"^([0-9a-f]{{64}}|{SHA256_UNPINNED})$",
-            description=(
-                f"Lowercase hex sha256 of the artifact, or '{SHA256_UNPINNED}' "
-                "while a maintainer is mid-bump (rejected by `modules validate`)."
-            ),
+            description=(f"Lowercase hex sha256 of the artifact, or '{SHA256_UNPINNED}' " "while a maintainer is mid-bump (rejected by `modules validate`)."),
         ),
     ]
     install_path: Annotated[
         str,
         Field(
             min_length=1,
-            description=(
-                "Fully-qualified in-container destination path. The compose "
-                "layer mounts/copies the cached artifact here."
-            ),
+            description=("Fully-qualified in-container destination path. The compose " "layer mounts/copies the cached artifact here."),
         ),
     ]
     requires_license_env: str | None = Field(
         default=None,
-        description=(
-            "Name of an env var the user must set with their license key. "
-            "None for community-usable modules and unlicensed drivers."
-        ),
+        description=("Name of an env var the user must set with their license key. " "None for community-usable modules and unlicensed drivers."),
     )
     requires_manual_download: bool = Field(
         default=False,
         description=(
-            "True when the artifact has no public URL (e.g. EA-gated). "
-            "`modules download` skips these unless local_source_path is set "
-            "and points at an existing file."
+            "True when the artifact has no public URL (e.g. EA-gated). " "`modules download` skips these unless local_source_path is set " "and points at an existing file."
         ),
     )
     local_source_path: str | None = Field(
@@ -121,9 +110,7 @@ class ModuleEntry(_EntryBase):
             min_length=1,
             pattern=r"^[a-z0-9.]+$",
             description=(
-                "Fully-qualified module identifier (e.g. "
-                "'com.cirruslink.mqtt.engine.gateway'). Used verbatim in "
-                "ACCEPT_MODULE_LICENSES and ACCEPT_MODULE_CERTS. NOT a path."
+                "Fully-qualified module identifier (e.g. " "'com.cirruslink.mqtt.engine.gateway'). Used verbatim in " "ACCEPT_MODULE_LICENSES and ACCEPT_MODULE_CERTS. NOT a path."
             ),
         ),
     ]

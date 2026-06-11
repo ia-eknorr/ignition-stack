@@ -70,9 +70,7 @@ def _fixture_catalog(
 def test_modules_list_exits_zero(tmp_path: Path, file_server) -> None:
     base_url, served = file_server
     (served / "MQTT-Engine.modl").write_bytes(b"x")
-    catalog = _fixture_catalog(
-        tmp_path, mqtt_url=f"{base_url}/MQTT-Engine.modl", mqtt_sha=_sha256(b"x")
-    )
+    catalog = _fixture_catalog(tmp_path, mqtt_url=f"{base_url}/MQTT-Engine.modl", mqtt_sha=_sha256(b"x"))
 
     result = runner.invoke(app, ["modules", "list", "--catalog", str(catalog)])
 
