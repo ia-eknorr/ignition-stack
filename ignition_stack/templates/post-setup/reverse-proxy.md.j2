@@ -1,8 +1,17 @@
-## Install the reverse proxy
+## Reverse proxy
 
 {{ reason }}
 
+{% if proxy_mode == "scaffold" -%}
 - **Read the scaffolded README:** `{{ proxy_path }}/README.md`
-- Clone ia-eknorr/traefik-reverse-proxy into `{{ proxy_path }}/` and follow its routing
-  and TLS instructions to put it in front of the gateway.
-- **Open the gateway UI:** {{ gateway_url }} (today a plain host-port mapping).
+- Clone ia-eknorr/traefik-reverse-proxy into `{{ proxy_path }}/` and bring it up
+  (`docker compose -p proxy up -d`) so it creates the `{{ proxy_network }}` network
+  this stack joins.
+{% else -%}
+- Make sure your proxy is up and owns the external `{{ proxy_network }}` Docker
+  network (the default ia-eknorr/traefik-reverse-proxy creates).
+{% endif -%}
+- The gateways are routed at:
+{% for route in proxy_routes %}
+  - **{{ route.role }}:** {{ route.url }}
+{%- endfor %}

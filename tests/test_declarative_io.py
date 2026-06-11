@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 
 from ignition_stack.cli import app
 from ignition_stack.compose import write_project
-from ignition_stack.config import dump_config, load_config
+from ignition_stack.config import ReverseProxyConfig, dump_config, load_config
 from ignition_stack.profiles import ProfileOptions, build_profile
 from ignition_stack.services.resolver import resolve
 
@@ -175,6 +175,24 @@ def test_dump_load_round_trip(tmp_path: Path, fmt: str) -> None:
     path = tmp_path / f"arch.{fmt}"
     path.write_text(dump_config(config, fmt), encoding="utf-8")  # type: ignore[arg-type]
     assert load_config(path).model_dump() == config.model_dump()
+
+
+@pytest.mark.parametrize("fmt", ["yaml", "json"])
+@pytest.mark.parametrize(
+    "proxy",
+    [
+        ReverseProxyConfig(mode="external", network="proxy"),
+        ReverseProxyConfig(mode="external", network="edge-net"),
+        ReverseProxyConfig(mode="scaffold", network="proxy", path="infra/proxy"),
+    ],
+)
+def test_reverse_proxy_round_trips(tmp_path: Path, fmt: str, proxy: ReverseProxyConfig) -> None:
+    """The reverse-proxy mode/network/path survive a dump/load round-trip."""
+    config = resolve(build_profile("standalone", "demo", ProfileOptions(reverse_proxy=proxy)))
+    path = tmp_path / f"arch.{fmt}"
+    path.write_text(dump_config(config, fmt), encoding="utf-8")  # type: ignore[arg-type]
+    loaded = load_config(path)
+    assert loaded.reverse_proxy == proxy
 
 
 @pytest.mark.parametrize("profile", ["standalone", "scaleout", "hub-and-spoke", "mcp-n8n"])

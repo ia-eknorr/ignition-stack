@@ -165,13 +165,23 @@ def init(
     reverse_proxy: str | None = typer.Option(
         None,
         "--reverse-proxy",
-        help=("Scaffold a reverse proxy of the given kind ('traefik'). Lays down a " "README + POST-SETUP entry at --proxy-path. Omit for plain host-port mapping."),
+        help=(
+            "Route gateways through a Traefik reverse proxy instead of host "
+            "ports. 'external' joins a proxy you already run (on --proxy-network); "
+            "'scaffold' also lays down the ia-eknorr/traefik-reverse-proxy README "
+            "at --proxy-path. Omit for plain host-port mapping."
+        ),
         autocompletion=complete_reverse_proxy,
+    ),
+    proxy_network: str = typer.Option(
+        "proxy",
+        "--proxy-network",
+        help="External Docker network the proxy routes on (with --reverse-proxy). Defaults to 'proxy'.",
     ),
     proxy_path: str = typer.Option(
         "reverse-proxy",
         "--proxy-path",
-        help="Relative directory the reverse-proxy scaffold lives in (with --reverse-proxy).",
+        help="Relative directory the scaffolded proxy README lives in (with --reverse-proxy scaffold).",
     ),
     force: bool = typer.Option(
         False,
@@ -297,6 +307,7 @@ def init(
             edge_role=edge_role,
             network_split=network_split,
             reverse_proxy=reverse_proxy,
+            proxy_network=proxy_network,
             proxy_path=proxy_path,
             redundant=redundant,
             disable_builtin=disable_builtin,
@@ -323,9 +334,22 @@ def init(
     console.print("Next steps:")
     console.print(f"  cd {target}")
     console.print("  docker compose up -d")
-    console.print(f"  open http://localhost:{config.gateways[0].http_port}  (admin / {config.admin_password})")
+    console.print(f"  open {_gateway_open_url(config)}  (admin / {config.admin_password})")
     console.print()
     console.print(f"  config recorded in {LIFECYCLE_DIR}/ - run `ignition-stack reset` to " "regenerate or `switch-profile <name>` to reshape this stack.")
+
+
+def _gateway_open_url(config: ProjectConfig) -> str:
+    """The URL the first gateway is reachable at after `compose up`.
+
+    A proxied stack publishes no host port - the proxy's Host rule is the
+    front door - so the localhost:<port> form only applies to host-port mode.
+    """
+    if config.reverse_proxy is not None:
+        from ignition_stack.compose.engine import proxy_url
+
+        return proxy_url(config, config.gateways[0])
+    return f"http://localhost:{config.gateways[0].http_port}"
 
 
 def _validate_init_flags(*, profile: str | None, from_file: Path | None, dry_run: bool, fmt: str | None) -> None:
@@ -376,6 +400,7 @@ def _build_from_profile(
     edge_role: str | None,
     network_split: bool | None,
     reverse_proxy: str | None,
+    proxy_network: str,
     proxy_path: str,
     redundant: str | None,
     disable_builtin: list[str],
@@ -389,7 +414,12 @@ def _build_from_profile(
         console.print(f"[red]error[/red]: {exc}")
         raise typer.Exit(code=2) from exc
 
-    proxy = ReverseProxyConfig(kind=reverse_proxy, path=proxy_path) if reverse_proxy else None
+    proxy: ReverseProxyConfig | None = None
+    if reverse_proxy:
+        if reverse_proxy not in {"external", "scaffold"}:
+            console.print(f"[red]error[/red]: unsupported --reverse-proxy mode '{reverse_proxy}'; use 'external' or 'scaffold'.")
+            raise typer.Exit(code=2)
+        proxy = ReverseProxyConfig(mode=reverse_proxy, network=proxy_network, path=proxy_path)
     # --iiot-broker implies --iiot, so naming a broker is enough to turn the
     # overlay on; build_profile defaults the slug to 'chariot' when iiot is on
     # without an explicit broker.

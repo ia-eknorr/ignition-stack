@@ -308,6 +308,31 @@ def test_options_recover_iiot_intent() -> None:
     assert "chariot" not in options.services
 
 
+def test_options_recover_reverse_proxy() -> None:
+    from ignition_stack.cli import _options_from_config
+    from ignition_stack.config import ReverseProxyConfig
+
+    proxy = ReverseProxyConfig(mode="external", network="edge-net")
+    config = resolve(build_profile("standalone", "demo", ProfileOptions(reverse_proxy=proxy)))
+    options = _options_from_config(config)
+    assert options.reverse_proxy == proxy
+
+
+def test_reverse_proxy_carries_across_switch_profile(runner: CliRunner, tmp_path: Path) -> None:
+    """A reshape preserves the proxy mode + network on the new topology."""
+    runner.invoke(
+        app,
+        ["init", "demo", "--profile", "standalone", "--reverse-proxy", "external", "--proxy-network", "edge-net", "-o", str(tmp_path)],
+    )
+    project = tmp_path / "demo"
+    result = runner.invoke(app, ["switch-profile", "scaleout", "-C", str(project)])
+    assert result.exit_code == 0, result.stdout
+    config = read_record(project)
+    assert config.reverse_proxy is not None
+    assert config.reverse_proxy.mode == "external"
+    assert config.reverse_proxy.network == "edge-net"
+
+
 def test_options_leave_database_kind_none_for_custom_primary_db(tmp_path: Path) -> None:
     from ignition_stack.cli import _options_from_config
 

@@ -85,7 +85,7 @@ def test_tweak_handoff_adds_emqx_and_keeps_everything_else() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",  # reverse proxy
+            "ports",  # exposure: host ports
             "tweak",  # summary action -> composer, pre-filled
             # composer loop:
             "add",  # action
@@ -127,7 +127,7 @@ def test_quick_summary_cancel_marks_unconfirmed() -> None:
             False,  # redundancy
             False,  # iiot
             False,  # modules
-            "external",
+            "ports",
             "cancel",  # summary action
         ]
     )

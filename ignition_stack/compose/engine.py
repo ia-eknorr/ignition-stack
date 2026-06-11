@@ -53,6 +53,37 @@ if TYPE_CHECKING:
 NETWORK_FRONTEND = "frontend"
 NETWORK_BACKEND = "backend"
 
+# Domain the ia-eknorr/traefik-reverse-proxy default rule resolves on; every
+# *.localtest.me name maps to 127.0.0.1, so a generated router rule needs no
+# hosts-file edit. The gateway web port Traefik routes to inside the container.
+PROXY_DOMAIN = "localtest.me"
+PROXY_TARGET_PORT = 8088
+
+
+def proxy_route_id(config: ProjectConfig, gw: GatewayConfig) -> str:
+    """Stable, project-scoped Traefik router/service id for one gateway.
+
+    Traefik router and service names are global to the Docker daemon, so a bare
+    gateway name ('gateway', 'frontend') would collide across two generated
+    stacks sharing one proxy. Scoping by project keeps them unique. A
+    single-gateway stack collapses to just the project name (its lone gateway is
+    always named 'gateway'), matching the historical single-gateway vocabulary.
+    """
+    if config.is_multi_gateway:
+        return f"{config.name}-{gw.name}"
+    return config.name
+
+
+def proxy_host(config: ProjectConfig, gw: GatewayConfig) -> str:
+    """The ``Host()`` value Traefik routes this gateway on (sans scheme)."""
+    return f"{proxy_route_id(config, gw)}.{PROXY_DOMAIN}"
+
+
+def proxy_url(config: ProjectConfig, gw: GatewayConfig) -> str:
+    """The browser URL a proxied gateway is reachable at."""
+    return f"http://{proxy_host(config, gw)}"
+
+
 # Canonical render order for catalog services so goldens are deterministic.
 # Databases render in their historical position (right after the gateways),
 # handled separately; the rest follow this kind ordering, alphabetical within
@@ -86,6 +117,7 @@ def render_compose(
     footer_text = env.get_template("footer.yaml.j2").render(
         volumes=_volume_names(config),
         networks=_network_names(config),
+        external_networks=_external_network_names(config),
     )
 
     # Blank line between each service block keeps the emitted YAML
@@ -238,6 +270,17 @@ def _gateway_context(gw: GatewayConfig, config: ProjectConfig, catalog: Catalog 
         # only the backend (rare; used for backend-only edge cases).
         networks = [NETWORK_BACKEND] if gw.role == "backend" else [NETWORK_FRONTEND, NETWORK_BACKEND]
 
+    if config.reverse_proxy is not None:
+        # The gateway must sit on the proxy's external network so Traefik
+        # (which the ia-eknorr/traefik-reverse-proxy binds to that network) can
+        # reach port 8088. When network_split is off the gateway otherwise has
+        # no explicit networks block and rides the implicit 'default' network
+        # where the database lives; naming a network removes it from 'default',
+        # so we re-add 'default' explicitly to keep DB connectivity.
+        if not networks:
+            networks = ["default"]
+        networks = [*networks, config.reverse_proxy.network]
+
     module_identifiers = _module_identifiers_for(gw, catalog)
     cached_modules = bool(gw.modules)
 
@@ -323,9 +366,31 @@ def _ignition_context(ctx: dict[str, object], config: ProjectConfig, multi: bool
         "modules_enabled": _modules_enabled_for(gw, ctx["module_identifiers"]),  # type: ignore[arg-type]
         "database_service": _gateway_database_service(gw, config),
         "networks": ctx["networks"],
+        "proxy": _proxy_labels(gw, config),
         "rename": not is_backup,
         "gan_incoming": gan_incoming,
         "gan_outgoing": gan_outgoing,
+    }
+
+
+def _proxy_labels(gw: GatewayConfig, config: ProjectConfig) -> dict[str, object] | None:
+    """Traefik routing context for this gateway, or None when not proxied.
+
+    Mirrors what ia-eknorr/traefik-reverse-proxy expects: the provider only
+    routes containers carrying ``traefik.enable=true`` (its
+    EXPOSEDBYDEFAULT=false), so we emit an explicit, project-scoped router
+    ``Host`` rule plus the ``loadbalancer.server.port`` that pins Traefik to the
+    gateway web port (8088) rather than letting it guess among the gateway's
+    other exposed ports. When the proxy is on, the host-port publish is dropped
+    (``ports`` is suppressed in the template) - the proxy is the front door.
+    """
+    if config.reverse_proxy is None:
+        return None
+    route_id = proxy_route_id(config, gw)
+    return {
+        "router": route_id,
+        "host": proxy_host(config, gw),
+        "port": PROXY_TARGET_PORT,
     }
 
 
@@ -410,6 +475,18 @@ def _network_names(config: ProjectConfig) -> list[str]:
     if not config.network_split:
         return []
     return [NETWORK_FRONTEND, NETWORK_BACKEND]
+
+
+def _external_network_names(config: ProjectConfig) -> list[str]:
+    """External (pre-existing) networks the stack joins but does not create.
+
+    Only the reverse proxy's network today: the gateways attach to it, but the
+    proxy stack owns it, so we declare it ``external: true`` rather than letting
+    compose create a fresh one.
+    """
+    if config.reverse_proxy is None:
+        return []
+    return [config.reverse_proxy.network]
 
 
 def _wrap_description(description: str) -> list[str]:

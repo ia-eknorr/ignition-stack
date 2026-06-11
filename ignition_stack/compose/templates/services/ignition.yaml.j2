@@ -9,8 +9,10 @@
 {%- endif %}
     {{ bootstrap_service_name }}:
       condition: service_completed_successfully
+{%- if not proxy %}
   ports:
     - "{{ port_ref }}:8088"
+{%- endif %}
   volumes:
     - {{ volume_name }}:/usr/local/bin/ignition/data
   environment:
@@ -49,4 +51,11 @@
 {%- for net in networks %}
     - {{ net }}
 {%- endfor %}
+{%- endif %}
+{%- if proxy %}
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.{{ proxy.router }}.rule=Host(`{{ proxy.host }}`)"
+    - "traefik.http.routers.{{ proxy.router }}.entrypoints=web"
+    - "traefik.http.services.{{ proxy.router }}.loadbalancer.server.port={{ proxy.port }}"
 {%- endif %}

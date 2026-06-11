@@ -62,8 +62,16 @@ _GATEWAY_NETWORK_LINK_REASON = (
     "the links came up, and reach for the runbook only if one did not."
 )
 _MCP_MODULE_REASON = "The Ignition MCP module is Early-Access and gated behind a survey, so the " "CLI cannot bundle it. Request the .modl, drop it in, and re-up the stack."
-_REVERSE_PROXY_REASON = (
-    "The CLI never clones a proxy silently. The wizard scaffolded a README that " "walks through installing ia-eknorr/traefik-reverse-proxy in front of the " "stack."
+_REVERSE_PROXY_SCAFFOLD_REASON = (
+    "The CLI never clones a proxy silently. A README was scaffolded that walks "
+    "through installing ia-eknorr/traefik-reverse-proxy in front of the stack; "
+    "the gateways already carry the Traefik labels and join its network."
+)
+_REVERSE_PROXY_EXTERNAL_REASON = (
+    "The gateways are routed through the reverse proxy you already run - they "
+    "join its external Docker network and carry the Traefik labels instead of "
+    "publishing a host port. This step is a verification: confirm the proxy is "
+    "up and the routes resolve, no manual wiring required."
 )
 _REDUNDANCY_PAIRING_REASON = (
     "This stack seeds redundancy fully: a pre-seeded redundancy.xml sets each "
@@ -131,7 +139,8 @@ def _collect_steps(config: ProjectConfig) -> list[_Step]:
     if config.mcp_dropin:
         steps.append(_Step("mcp-module", _MCP_MODULE_REASON, ""))
     if config.reverse_proxy is not None:
-        steps.append(_Step("reverse-proxy", _REVERSE_PROXY_REASON, ""))
+        reason = _REVERSE_PROXY_SCAFFOLD_REASON if config.reverse_proxy.mode == "scaffold" else _REVERSE_PROXY_EXTERNAL_REASON
+        steps.append(_Step("reverse-proxy", reason, ""))
 
     return steps
 
@@ -171,8 +180,32 @@ def _context(config: ProjectConfig, step: _Step) -> dict[str, object]:
         "env_vars": env_vars,
         "env_map": dict(env_vars),
         "proxy_path": config.reverse_proxy.path if config.reverse_proxy else "",
+        "proxy_mode": config.reverse_proxy.mode if config.reverse_proxy else "",
+        "proxy_network": config.reverse_proxy.network if config.reverse_proxy else "",
+        "proxy_routes": _proxy_routes(config),
         "dropin_dir": "modules/dropin",
     }
+
+
+def _proxy_routes(config: ProjectConfig) -> list[dict[str, str]]:
+    """Per-gateway proxy URLs, for the reverse-proxy verification readout.
+
+    Empty when the stack is not proxied. Each entry pairs a gateway's role/name
+    with the ``*.localtest.me`` URL Traefik routes it on, computed from the same
+    project-scoped host logic the compose labels carry.
+    """
+    if config.reverse_proxy is None:
+        return []
+    from ignition_stack.compose.engine import proxy_url
+
+    return [
+        {
+            "name": gw.name,
+            "role": gw.role or gw.name,
+            "url": proxy_url(config, gw),
+        }
+        for gw in config.gateways
+    ]
 
 
 def _mqtt_wiring(config: ProjectConfig) -> dict[str, object] | None:

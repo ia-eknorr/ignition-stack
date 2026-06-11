@@ -45,8 +45,9 @@ ignition-stack init [OPTIONS] NAME
 - `--spokes` `INTEGER` (default `3`): Spoke gateway count for the hub-and-spoke profile (ignored otherwise).
 - `--frontends` `INTEGER` (default `1`): Frontend gateway count for the scaleout profile (ignored otherwise).
 - `--network-split`, `--no-network-split` (flag): Force the frontend/backend network split on or off. Default follows the profile (scaleout splits, hub-and-spoke does not).
-- `--reverse-proxy` `TEXT`: Scaffold a reverse proxy of the given kind ('traefik'). Lays down a README + POST-SETUP entry at --proxy-path. Omit for plain host-port mapping.
-- `--proxy-path` `TEXT` (default `reverse-proxy`): Relative directory the reverse-proxy scaffold lives in (with --reverse-proxy).
+- `--reverse-proxy` `TEXT`: Route gateways through a Traefik reverse proxy instead of host ports. 'external' joins a proxy you already run (on --proxy-network); 'scaffold' also lays down the ia-eknorr/traefik-reverse-proxy README at --proxy-path. Omit for plain host-port mapping.
+- `--proxy-network` `TEXT` (default `proxy`): External Docker network the proxy routes on (with --reverse-proxy). Defaults to 'proxy'.
+- `--proxy-path` `TEXT` (default `reverse-proxy`): Relative directory the scaffolded proxy README lives in (with --reverse-proxy scaffold).
 - `--force` (flag): Bypass the hub-and-spoke red-tier RAM advisory.
 - `--edge-role` `TEXT`: Gateway role that runs the Ignition Edge edition. Scaleout runs all gateways standard by default; hub-and-spoke defaults its spokes to Edge. Pass 'none' to disable the profile's edge default; pass a role name ('frontend', 'hub', 'gateway', ...) to opt that specific role in.
 - `--redundant` `TEXT`: Make a single gateway role redundant, expanding it into a master + backup pair (e.g. 'backend' for scaleout, 'hub' for hub-and-spoke, 'gateway' for standalone). Frontends and spokes are replicated, not paired, and are rejected.

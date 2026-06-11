@@ -373,14 +373,25 @@ class DatabaseConfig(BaseModel):
 
 
 class ReverseProxyConfig(BaseModel):
-    """Optional reverse-proxy scaffolding.
+    """Reverse-proxy routing for the gateways.
 
     Default behavior (``ProjectConfig.reverse_proxy is None``) emits a plain
-    host-port mapping on each gateway and assumes the user already runs Traefik,
-    nginx, or another proxy somewhere - or doesn't need one at all. Setting
-    this to a :class:`ReverseProxyConfig` lays down the ``ia-eknorr/traefik-
-    reverse-proxy`` README at ``path`` and adds a POST-SETUP entry pointing at
-    that repo. The CLI never silently bundles a proxy.
+    host-port mapping on each gateway - the gateway is reachable at
+    ``http://localhost:<port>`` and no proxy is involved.
+
+    Setting this routes every gateway through a Traefik reverse proxy instead:
+    the gateway services join the proxy's external Docker ``network`` and carry
+    the Traefik labels (``traefik.enable``, a project-scoped router ``Host`` rule
+    on ``.localtest.me``, and the ``loadbalancer.server.port=8088`` that points
+    Traefik at the gateway web port), and the host-port mapping is dropped (the
+    proxy is the front door). Two modes:
+
+    - ``mode="external"`` - join a proxy the user already runs (the default
+      ``ia-eknorr/traefik-reverse-proxy`` creates a network named ``proxy``).
+      Nothing is scaffolded; the stack only attaches to ``network``.
+    - ``mode="scaffold"`` - lay down the ``ia-eknorr/traefik-reverse-proxy``
+      README at ``path`` (the CLI never clones it silently) AND wire the stack to
+      the ``network`` that scaffold will create. ``path`` is only meaningful here.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -389,14 +400,42 @@ class ReverseProxyConfig(BaseModel):
         default="traefik",
         description="Reverse-proxy flavor. Only Traefik is supported today.",
     )
+    mode: Literal["external", "scaffold"] = Field(
+        default="external",
+        description=(
+            "'external' joins a proxy the user already runs; 'scaffold' also lays "
+            "down the ia-eknorr/traefik-reverse-proxy README at 'path' and wires "
+            "the stack to the network that scaffold creates."
+        ),
+    )
+    network: str = Field(
+        default="proxy",
+        description=(
+            "External Docker network the proxy routes on. 'proxy' is the default "
+            "ia-eknorr/traefik-reverse-proxy creates; the gateways join it as an "
+            "'external: true' network so Traefik can reach them."
+        ),
+    )
     path: str = Field(
         default="reverse-proxy",
         description=(
             "Relative directory under the project root that holds the proxy "
             "README + install instructions (e.g. 'reverse-proxy', "
-            "'infra/proxy'). Must be a non-empty relative POSIX path."
+            "'infra/proxy'). Only used in 'scaffold' mode. Must be a non-empty "
+            "relative POSIX path."
         ),
     )
+
+    @field_validator("network")
+    @classmethod
+    def _validate_network(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("reverse-proxy network must not be empty")
+        # Docker network names start alphanumeric, then allow [a-zA-Z0-9_.-].
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", stripped):
+            raise ValueError("reverse-proxy network must be a valid Docker network name (start alphanumeric; letters, digits, '_', '.', '-')")
+        return stripped
 
     @field_validator("path")
     @classmethod
@@ -459,9 +498,10 @@ class ProjectConfig(BaseModel):
     reverse_proxy: ReverseProxyConfig | None = Field(
         default=None,
         description=(
-            "Reverse-proxy scaffolding. None (default) emits plain host-port "
-            "mappings. Set when the user accepts the wizard's offer to install "
-            "ia-eknorr/traefik-reverse-proxy at a chosen path."
+            "Reverse-proxy routing. None (default) emits plain host-port "
+            "mappings. Set to route every gateway through a Traefik proxy: the "
+            "gateways join the proxy's external network and carry Traefik labels "
+            "instead of publishing a host port."
         ),
     )
     mcp_dropin: bool = Field(
