@@ -12,6 +12,11 @@ requires: []
 env:
   MODBUS_SIM_PORT: "5020"
 seeds_gateway_resources: false
+connection:
+  in_network: "tcp://{id}:5020"
+  host_port_env: MODBUS_SIM_PORT
+  credential_env: []
+  note: "Modbus TCP; no authentication. Default unit ID is 1."
 post_setup:
   - connection: device-connection
     reason: >-

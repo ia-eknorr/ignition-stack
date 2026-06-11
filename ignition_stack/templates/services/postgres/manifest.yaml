@@ -28,4 +28,12 @@ singleton: true
 singleton_scope: attached
 placement:
   never_on_edge: true
+connection:
+  # Internal port is always 5432; the DB_USER name doubles as the database name.
+  in_network: "jdbc:postgresql://{id}:5432/{db_user}"
+  # Postgres publishes no host port by default — the gateway connects in-network.
+  host_port_env: ""
+  credential_env:
+    - DB_USER
+    - DB_PASSWORD
 post_setup: []

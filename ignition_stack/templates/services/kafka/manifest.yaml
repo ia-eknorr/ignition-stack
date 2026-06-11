@@ -13,6 +13,13 @@ env:
   KAFKA_PORT: "9094"
   KAFKA_CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
 seeds_gateway_resources: false
+connection:
+  # The in-network bootstrap broker is kafka:9092 (PLAINTEXT listener). The host
+  # listener is on 9094 (PLAINTEXT_HOST), mapped by KAFKA_PORT.
+  in_network: "{id}:9092"
+  host_port_env: KAFKA_PORT
+  credential_env: []
+  note: "No authentication in KRaft demo mode; all clients connect anonymously."
 post_setup:
   - connection: kafka-connector
     reason: >-

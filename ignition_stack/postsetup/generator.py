@@ -101,14 +101,17 @@ def generate_post_setup(config: ProjectConfig) -> str:
 
     Always returns a document: a "no manual steps required" note when the stack
     is fully seedable, or a header plus one section per deferred connection.
+    A Connections reference section is appended in all cases.
     """
     steps = _collect_steps(config)
+    connections_block = _connections_section(config)
+
     if not steps:
-        return _NO_MANUAL_STEPS
+        return _NO_MANUAL_STEPS + "\n" + connections_block
 
     env = _jinja_env()
     sections = [_render_step(env, _context(config, step)) for step in steps]
-    return _HEADER + "\n" + "\n\n".join(sections) + "\n"
+    return _HEADER + "\n" + "\n\n".join(sections) + "\n\n" + connections_block
 
 
 def _collect_steps(config: ProjectConfig) -> list[_Step]:
@@ -329,6 +332,130 @@ def _gan_links(config: ProjectConfig) -> list[dict[str, object]]:
                 }
             )
     return links
+
+
+@dataclass
+class _ServiceEntry:
+    """One row in the Connections reference table."""
+
+    label: str  # human name: "postgres (db)" or "gateway"
+    in_network: str  # the in-network URI or "—"
+    host_access: str  # "localhost:PORT" or proxy URL or "—"
+    credentials: list[str]  # ["DB_USER (default: ignition)", "DB_PASSWORD ..."]
+    note: str  # one-sentence note (may be "")
+
+
+def _connections_section(config: ProjectConfig) -> str:
+    """Render the Connections reference section appended to every POST-SETUP.md.
+
+    Collects one entry per gateway plus one per service instance (attached and
+    flat), then renders via the ``connections.md.j2`` template so the exact
+    Markdown shape can be tuned without touching Python.
+    """
+    env = _jinja_env()
+    template = env.get_template("connections.md.j2")
+    entries = _gateway_entries(config) + _service_entries(config)
+    return template.render(entries=entries).rstrip() + "\n"
+
+
+def _gateway_entries(config: ProjectConfig) -> list[_ServiceEntry]:
+    """One entry per gateway: web UI URL (in-network + host/proxy)."""
+    entries = []
+    for gw in config.gateways:
+        label = f"gateway ({gw.name})" if config.is_multi_gateway else "gateway"
+        in_network = f"http://{gw.name}:8088"
+        if config.reverse_proxy is not None:
+            from ignition_stack.compose.engine import proxy_url
+
+            host = proxy_url(config, gw)
+        else:
+            host = f"http://localhost:{gw.http_port}"
+        creds = [f"ADMIN_PASSWORD in `.env` (default: `{config.admin_password}`)"]
+        note = f"Username: `{config.admin_username}`."
+        entries.append(_ServiceEntry(label, in_network, host, creds, note))
+    return entries
+
+
+def _service_entries(config: ProjectConfig) -> list[_ServiceEntry]:
+    """One entry per service instance (database + non-database, attached and flat)."""
+    catalog = load_all_services()
+    entries: list[_ServiceEntry] = []
+
+    for inst in config.service_instances:
+        manifest = catalog.get(inst.service)
+        if manifest is None or manifest.connection is None:
+            continue
+        spec = manifest.connection
+        db_user = inst.user if inst.is_database else ""
+
+        # Resolve {id} and {db_user} placeholders in the in_network template.
+        in_network = spec.in_network.replace("{id}", inst.id).replace("{db_user}", db_user)
+        # Resolve the same placeholders in the note.
+        note = spec.note.replace("{id}", inst.id).replace("{db_user}", db_user)
+
+        host_access = _host_access(inst, spec, manifest, config)
+        credentials = _credentials(inst, spec, manifest, config)
+
+        label = f"{manifest.name} ({inst.id})" if inst.id != manifest.name else manifest.name
+        entries.append(_ServiceEntry(label, in_network, host_access, credentials, note))
+    return entries
+
+
+def _host_access(
+    inst: object,
+    spec: object,
+    manifest: object,
+    config: ProjectConfig,
+) -> str:
+    """Derive host-access string for a service instance.
+
+    - ``host_port_env`` set → ``localhost:<default>`` (port from manifest env).
+    - No host port env → "—" (service not host-published).
+    """
+    host_port_env = getattr(spec, "host_port_env", "")
+    if not host_port_env:
+        return "—"
+    env_defaults = getattr(manifest, "env", {})
+    default_port = env_defaults.get(host_port_env, "?")
+    return f"localhost:{default_port}"
+
+
+def _credentials(
+    inst: object,
+    spec: object,
+    manifest: object,
+    config: ProjectConfig,
+) -> list[str]:
+    """Build the credentials list for a service instance.
+
+    Each ``credential_env`` key resolves to a human string like:
+    ``DB_USER in .env (default: ignition)``.
+
+    For database services the ``DB_*`` keys come from the instance itself (not
+    the manifest env, which is empty for databases), so we pull them from the
+    config's database vocabulary.
+    """
+    credential_env: list[str] = getattr(spec, "credential_env", [])
+    if not credential_env:
+        return []
+
+    env_defaults = dict(getattr(manifest, "env", {}))
+    # Database instances carry their credentials directly (DB_USER / DB_PASSWORD),
+    # not in the manifest env (which is {}). Inject them so the formatter below
+    # can resolve them the same way it does for all other services.
+    is_db = getattr(inst, "is_database", False)
+    if is_db:
+        env_defaults["DB_USER"] = getattr(inst, "user", "ignition")
+        env_defaults["DB_PASSWORD"] = getattr(inst, "password", "ignition")
+
+    result = []
+    for key in credential_env:
+        default = env_defaults.get(key, "")
+        if default:
+            result.append(f"`{key}` in `.env` (default: `{default}`)")
+        else:
+            result.append(f"`{key}` in `.env`")
+    return result
 
 
 def _render_step(env: Environment, ctx: dict[str, object]) -> str:

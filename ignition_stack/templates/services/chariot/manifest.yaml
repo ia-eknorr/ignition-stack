@@ -25,6 +25,20 @@ wires:
     transmission_module: mqtt-transmission
     engine_module: mqtt-engine
     port: 1883
+connection:
+  # In-network MQTT is always 1883 (Sparkplug port); CHARIOT_MQTT_PORT is the
+  # host mapping. The web admin UI (commissioning/mgmt) listens on 8080 in-container.
+  in_network: "tcp://{id}:1883"
+  host_port_env: CHARIOT_MQTT_PORT
+  credential_env:
+    - CHARIOT_ADMIN_PASSWORD
+  # Chariot quirk: the MQTT client username is the fixed image user "admin", and
+  # its password is CHARIOT_ADMIN_PASSWORD — NOT the same as ADMIN_PASSWORD. This
+  # decoupling is intentional in the Chariot image and cannot be changed via env.
+  note: >-
+    MQTT client username is the fixed image user `admin`; password is
+    `CHARIOT_ADMIN_PASSWORD`. Web admin UI: `http://{id}:8080`
+    (host: `localhost:CHARIOT_HTTP_PORT`).
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

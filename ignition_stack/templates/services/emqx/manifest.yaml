@@ -25,6 +25,12 @@ wires:
     transmission_module: mqtt-transmission
     engine_module: mqtt-engine
     port: 1883
+connection:
+  in_network: "tcp://{id}:1883"
+  host_port_env: EMQX_MQTT_PORT
+  credential_env:
+    - EMQX_DASHBOARD_PASSWORD
+  note: "Dashboard UI: `http://{id}:18083` (host: `localhost:EMQX_DASHBOARD_PORT`); default dashboard user is `admin`."
 post_setup:
   - connection: mqtt-engine-connection
     reason: >-

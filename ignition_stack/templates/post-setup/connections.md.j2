@@ -1,0 +1,23 @@
+---
+
+## Connections reference
+
+Quick-reference for every service in this stack. **In-network** is what a
+sibling container uses (service name as hostname); **Host access** is what you
+open from your laptop.
+
+{% for entry in entries %}
+### {{ entry.label }}
+
+| | |
+|---|---|
+| **In-network** | `{{ entry.in_network }}` |
+| **Host access** | {{ entry.host_access }} |
+{%- if entry.credentials %}
+| **Credentials** | {{ entry.credentials | join(", ") }} |
+{%- endif %}
+{%- if entry.note %}
+| **Note** | {{ entry.note }} |
+{%- endif %}
+
+{% endfor -%}

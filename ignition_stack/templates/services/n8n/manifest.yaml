@@ -13,4 +13,9 @@ requires: []
 env:
   N8N_PORT: "5678"
 seeds_gateway_resources: false
+connection:
+  in_network: "http://{id}:5678"
+  host_port_env: N8N_PORT
+  credential_env: []
+  note: "First-boot owner registration is required in the n8n UI before the API is usable."
 post_setup: []
