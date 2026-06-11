@@ -216,9 +216,10 @@ def test_connections_section_chariot_exact_strings() -> None:
     conn = _connections(body)
     assert "tcp://chariot:1883" in conn
     assert "`CHARIOT_ADMIN_PASSWORD` in `.env` (default: `password`)" in conn
-    # The Chariot quirk (admin/changeme trap) must be visible in the note.
-    assert "admin" in conn
-    assert "CHARIOT_ADMIN_PASSWORD" in conn
+    # The Chariot quirk must be stated correctly: MQTT auth is the image-seeded
+    # admin/changeme, NOT CHARIOT_ADMIN_PASSWORD (web admin UI only).
+    assert "`admin` / `changeme`" in conn
+    assert "only sets the web admin UI password" in conn
 
 
 def test_connections_section_keycloak_exact_strings() -> None:
