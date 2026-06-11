@@ -104,16 +104,16 @@ class ScriptedPrompter:
         except StopIteration as exc:
             raise AssertionError("ScriptedPrompter ran out of answers") from exc
 
-    def select(self, message: str, choices: Sequence[tuple[str, str]], default=None) -> str:
+    def select(self, message: str, choices: Sequence[tuple[str, str]], default=None, allow_back: bool = False):
         return self._next()
 
     def text(self, message: str, default: str = "") -> str:
         return self._next()
 
-    def confirm(self, message: str, default: bool = False) -> bool:
+    def confirm(self, message: str, default: bool = False, allow_back: bool = False):
         return self._next()
 
-    def integer(self, message: str, default: int, minimum: int = 0) -> int:
+    def integer(self, message: str, default: int, minimum: int = 0, allow_back: bool = False):
         return self._next()
 
     def checkbox(self, message: str, choices: Sequence[tuple[str, str, bool]]) -> list:
