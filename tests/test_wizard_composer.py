@@ -134,6 +134,72 @@ def test_quick_summary_cancel_marks_unconfirmed() -> None:
     assert walk("demo", prompter).confirmed is False
 
 
+def test_quick_summary_preview_then_generate(capsys) -> None:
+    """Preview at the summary prints the resolved config dump, then re-shows
+    the prompt; choosing generate afterwards confirms the outcome and leaves
+    the config identical to a direct generate."""
+    base_prompter = ScriptedPrompter(
+        [
+            "quick",
+            "standalone",
+            "postgres",
+            "none",  # edge_role
+            False,  # redundancy
+            False,  # iiot
+            False,  # modules
+            "external",
+            "generate",  # direct generate (reference)
+        ]
+    )
+    base_outcome = walk("demo", base_prompter)
+
+    preview_prompter = ScriptedPrompter(
+        [
+            "quick",
+            "standalone",
+            "postgres",
+            "none",
+            False,
+            False,
+            False,
+            "external",
+            "preview",  # show the dump once …
+            "generate",  # … then confirm
+        ]
+    )
+    outcome = walk("demo", preview_prompter)
+    assert outcome.confirmed
+    # Config produced after preview must equal the no-preview path.
+    assert outcome.config.model_dump(mode="json") == base_outcome.config.model_dump(mode="json")
+    # The YAML dump was printed to stdout.
+    out = capsys.readouterr().out
+    assert "gateways" in out
+
+
+def test_quick_summary_preview_then_cancel(capsys) -> None:
+    """Preview prints the dump and then re-shows the prompt; cancelling marks
+    the outcome as unconfirmed."""
+    prompter = ScriptedPrompter(
+        [
+            "quick",
+            "standalone",
+            "postgres",
+            "none",
+            False,
+            False,
+            False,
+            "external",
+            "preview",  # print the dump …
+            "cancel",  # … then bail
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.confirmed is False
+    # The dump was still printed before the user cancelled.
+    out = capsys.readouterr().out
+    assert "gateways" in out
+
+
 # --------------------------------------------------------------------------- #
 # Custom track from scratch
 # --------------------------------------------------------------------------- #

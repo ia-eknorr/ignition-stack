@@ -56,7 +56,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from ignition_stack.config import ProjectConfig, ReverseProxyConfig
+from rich.console import Console
+
+from ignition_stack.config import ProjectConfig, ReverseProxyConfig, dump_config
 from ignition_stack.profiles import (
     ProfileError,
     ProfileOptions,
@@ -64,6 +66,8 @@ from ignition_stack.profiles import (
     list_profiles,
 )
 from ignition_stack.services.resolver import resolve
+
+console = Console()
 
 # Track-gate values (the wizard's first prompt). Quick keeps the linear profile
 # flow; Custom hands off to the per-gateway composer.
@@ -240,7 +244,11 @@ def _run_quick_track(name: str, prompter: Prompter) -> WizardOutcome:
         )
 
     summary = _summarize(config, profile_slug, options)
-    action = _ask_summary_action(prompter, summary)
+    while True:
+        action = _ask_summary_action(prompter, summary)
+        if action != "preview":
+            break
+        console.print(dump_config(resolve(config), "yaml"), end="", markup=False)
     if action == "tweak":
         # Hand the built, resolved config to the composer pre-filled. Its summary
         # loop takes over and produces the final config.
@@ -561,6 +569,7 @@ def _ask_summary_action(prompter: Prompter, summary: list[str]) -> str:
         f"Ready to generate?\n\n{block}\n",
         [
             ("generate", "Generate the project"),
+            ("preview", "Preview the resolved config (dry-run)"),
             ("tweak", "Tweak per-gateway services in the custom composer"),
             ("cancel", "Cancel"),
         ],

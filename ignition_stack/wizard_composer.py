@@ -37,7 +37,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ignition_stack.catalog.builtins import default_builtin_catalog, jdbc_driver_for
-from ignition_stack.config import ProjectConfig, ServiceAttachment, ServiceInstance
+from ignition_stack.config import ProjectConfig, ServiceAttachment, ServiceInstance, dump_config
 from ignition_stack.profiles import ProfileOptions, apply_iiot
 from ignition_stack.services.loader import load_all_services
 from ignition_stack.services.manifest import ServiceManifest
@@ -105,15 +105,20 @@ def edit_loop(
         _print_composition(working)
         action = prompter.select("Composer action?", _ACTIONS, default="done")
         if action == "done":
-            choice = prompter.select(
-                "Generate this composition?",
-                [
-                    ("generate", "Generate the project"),
-                    ("edit", "Keep editing"),
-                    ("cancel", "Cancel"),
-                ],
-                default="generate",
-            )
+            while True:
+                choice = prompter.select(
+                    "Generate this composition?",
+                    [
+                        ("generate", "Generate the project"),
+                        ("preview", "Preview the resolved config (dry-run)"),
+                        ("edit", "Keep editing"),
+                        ("cancel", "Cancel"),
+                    ],
+                    default="generate",
+                )
+                if choice != "preview":
+                    break
+                console.print(dump_config(working, "yaml"), end="", markup=False)
             if choice == "edit":
                 continue
             return ComposerResult(
