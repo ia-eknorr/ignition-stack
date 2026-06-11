@@ -85,6 +85,7 @@ const sidebars: SidebarsConfig = {
         "guides/wizard",
         "guides/reset-and-reshape",
         "guides/declarative-config",
+        "guides/iiot-overlay",
         "guides/redundancy",
         "guides/disable-builtins",
         "guides/teardown",

@@ -56,10 +56,7 @@ def _check_or_update_golden(rel_path: str, actual: str) -> None:
         golden.write_text(actual, encoding="utf-8")
         return
     assert golden.exists(), f"missing golden {golden}; run with UPDATE_GOLDENS=1 to create"
-    assert golden.read_text(encoding="utf-8") == actual, (
-        f"compose output diverges from golden '{rel_path}'. "
-        "Run with UPDATE_GOLDENS=1 to update if the change is intentional."
-    )
+    assert golden.read_text(encoding="utf-8") == actual, f"compose output diverges from golden '{rel_path}'. " "Run with UPDATE_GOLDENS=1 to update if the change is intentional."
 
 
 # --------------------------------------------------------------------------- #
@@ -93,9 +90,7 @@ def test_redundant_standalone_expands_to_pair() -> None:
 
 
 def test_scaleout_redundant_backend_pairs_only_backend() -> None:
-    config = build_profile(
-        "scaleout", "demo", ProfileOptions(frontends=2, redundant_role="backend")
-    )
+    config = build_profile("scaleout", "demo", ProfileOptions(frontends=2, redundant_role="backend"))
     resolved = resolve(config)
     names = [gw.name for gw in resolved.gateways]
     assert names == ["frontend-1", "frontend-2", "backend", "backend-backup"]
@@ -133,15 +128,11 @@ def test_unknown_redundant_role_rejected() -> None:
 
 
 def _redundant_scaleout() -> ProjectConfig:
-    return resolve(
-        build_profile("scaleout", "demo", ProfileOptions(frontends=1, redundant_role="backend"))
-    )
+    return resolve(build_profile("scaleout", "demo", ProfileOptions(frontends=1, redundant_role="backend")))
 
 
 def test_redundant_compose_golden() -> None:
-    _check_or_update_golden(
-        "scaleout-redundant/docker-compose.yaml", render_compose(_redundant_scaleout())
-    )
+    _check_or_update_golden("scaleout-redundant/docker-compose.yaml", render_compose(_redundant_scaleout()))
 
 
 def test_redundant_compose_wiring() -> None:
@@ -217,9 +208,7 @@ def test_no_redundancy_no_post_setup_section() -> None:
 
 
 def test_redundant_edge_yields_two_edge_nodes() -> None:
-    config = build_profile(
-        "standalone", "demo", ProfileOptions(edge_role="gateway", redundant_role="gateway")
-    )
+    config = build_profile("standalone", "demo", ProfileOptions(edge_role="gateway", redundant_role="gateway"))
     resolved = resolve(config)
     editions = {gw.name: gw.ignition_edition for gw in resolved.gateways}
     assert editions == {"gateway": "edge", "gateway-backup": "edge"}

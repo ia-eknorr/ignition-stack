@@ -73,9 +73,7 @@ def test_cli_reference_in_sync() -> None:
     committed = gen.OUTPUT_PATH.read_text(encoding="utf-8")
     rendered = gen.build_reference()
     assert committed == rendered, (
-        "docs/docs/reference/cli.md is out of date with the CLI. "
-        "Regenerate it: `uv run python docs/gen_cli_reference.py` "
-        "(or `npm --prefix docs run gen:cli`)."
+        "docs/docs/reference/cli.md is out of date with the CLI. " "Regenerate it: `uv run python docs/gen_cli_reference.py` " "(or `npm --prefix docs run gen:cli`)."
     )
 
 

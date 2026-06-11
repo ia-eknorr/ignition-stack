@@ -64,11 +64,7 @@ def download_entry(
     if entry.requires_manual_download:
         return _handle_manual(entry, target)
 
-    if (
-        target.exists()
-        and entry.sha256 != SHA256_UNPINNED
-        and sha256_of_file(target) == entry.sha256
-    ):
+    if target.exists() and entry.sha256 != SHA256_UNPINNED and sha256_of_file(target) == entry.sha256:
         return DownloadResult(
             entry.name,
             DownloadOutcome.SKIPPED_CACHED,
@@ -78,8 +74,7 @@ def download_entry(
 
     if offline:
         raise DownloadError(
-            f"{entry.name}: --offline set but artifact not in cache "
-            f"({target}). Pre-populate the cache or drop --offline.",
+            f"{entry.name}: --offline set but artifact not in cache " f"({target}). Pre-populate the cache or drop --offline.",
         )
 
     if entry.download_url is None:
@@ -94,8 +89,7 @@ def download_entry(
         if actual != entry.sha256:
             target.unlink(missing_ok=True)
             raise DownloadError(
-                f"{entry.name}: sha256 mismatch after download "
-                f"(expected {entry.sha256}, got {actual}). Cached file removed.",
+                f"{entry.name}: sha256 mismatch after download " f"(expected {entry.sha256}, got {actual}). Cached file removed.",
             )
 
     return DownloadResult(
@@ -121,11 +115,7 @@ def _handle_manual(entry: CatalogEntry, target: Path) -> DownloadResult:
             entry.name,
             DownloadOutcome.SKIPPED_MANUAL,
             None,
-            (
-                f"WARN: {entry.name} local_source_path missing ({source}). "
-                "Skipping: requires manual download. "
-                "See POST-SETUP.md for instructions."
-            ),
+            (f"WARN: {entry.name} local_source_path missing ({source}). " "Skipping: requires manual download. " "See POST-SETUP.md for instructions."),
         )
 
     shutil.copy2(source, target)

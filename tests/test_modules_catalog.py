@@ -338,9 +338,7 @@ def test_validate_flags_unpinned_sha(tmp_path: Path) -> None:
     """Unpinned shas should fail validation independent of network checks."""
     payload = {
         "version": 1,
-        "entries": [
-            _module("foo", install_path="/usr/local/bin/ignition/user-lib/modules/Foo.modl")
-        ],
+        "entries": [_module("foo", install_path="/usr/local/bin/ignition/user-lib/modules/Foo.modl")],
     }
     catalog_path = _write_catalog(tmp_path, payload)
     catalog = load_catalog(catalog_path)

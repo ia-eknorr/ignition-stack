@@ -40,9 +40,7 @@ def test_init_without_name_exits_non_zero(runner: CliRunner) -> None:
 
 def test_init_with_invalid_name_exits_non_zero(runner: CliRunner, tmp_path: Path) -> None:
     """Names that violate the pydantic regex fail with exit code 2."""
-    result = runner.invoke(
-        app, ["init", "Bad Name", "--profile", "standalone", "-o", str(tmp_path)]
-    )
+    result = runner.invoke(app, ["init", "Bad Name", "--profile", "standalone", "-o", str(tmp_path)])
     assert result.exit_code == 2, result.stdout
 
 
@@ -73,9 +71,7 @@ def test_init_compose_matches_golden(runner: CliRunner, tmp_path: Path) -> None:
 
 
 def test_init_env_carries_resolved_values(runner: CliRunner, tmp_path: Path) -> None:
-    result = runner.invoke(
-        app, ["init", "my-stack", "--profile", "standalone", "-o", str(tmp_path)]
-    )
+    result = runner.invoke(app, ["init", "my-stack", "--profile", "standalone", "-o", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
 
     env_text = (tmp_path / "my-stack" / ".env").read_text(encoding="utf-8")
@@ -119,8 +115,7 @@ def test_init_refuses_to_clobber_existing_project(runner: CliRunner, tmp_path: P
 
 @pytest.mark.skipif(
     sys.platform == "win32",
-    reason="NTFS does not track the Unix execute bit; the script is run as `bash script` "
-    "inside a Linux container, so the host-side bit is irrelevant on Windows.",
+    reason="NTFS does not track the Unix execute bit; the script is run as `bash script` " "inside a Linux container, so the host-side bit is irrelevant on Windows.",
 )
 def test_bootstrap_script_is_executable(runner: CliRunner, tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", "demo", "--profile", "standalone", "-o", str(tmp_path)])

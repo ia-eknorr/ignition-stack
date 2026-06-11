@@ -149,9 +149,7 @@ def test_wipe_dry_run_emits_scoped_command(runner: CliRunner, tmp_path: Path) ->
     assert "docker compose -p demo down -v --remove-orphans" in result.stdout
 
 
-def test_wipe_resolves_project_name_from_env_when_record_absent(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_wipe_resolves_project_name_from_env_when_record_absent(runner: CliRunner, tmp_path: Path) -> None:
     # With the record removed, .env's COMPOSE_PROJECT_NAME still scopes the wipe.
     project = _init(runner, tmp_path)
     shutil.rmtree(project / LIFECYCLE_DIR)

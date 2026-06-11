@@ -100,8 +100,7 @@ def validate(
         raise typer.Exit(code=1)
 
     console.print(
-        f"[green]OK[/green]: {len(catalog.entries)} entries valid"
-        + (" (schema only)" if skip_network else " (schema + reachability)"),
+        f"[green]OK[/green]: {len(catalog.entries)} entries valid" + (" (schema only)" if skip_network else " (schema + reachability)"),
     )
 
 
