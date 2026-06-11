@@ -62,6 +62,20 @@ def test_every_idp_and_broker_manifest_is_singleton() -> None:
             assert manifest.singleton, f"{manifest.name} ({manifest.kind}) must be singleton"
 
 
+def test_singleton_scope_separates_global_idp_from_attachment_scoped_infra() -> None:
+    """Issue #67: databases and brokers are attachment-scoped singletons (a flat
+    duplicate is legal), while the IdP (Keycloak) stays a genuinely stack-global
+    singleton (its KEYCLOAK_* keys + realm seed are shared, so one only)."""
+    catalog = load_all_services()
+    for manifest in catalog.values():
+        if not manifest.singleton:
+            continue
+        if manifest.kind in {"database", "mqtt-broker"}:
+            assert manifest.singleton_scope == "attached", f"{manifest.name} should be an attachment-scoped singleton"
+        elif manifest.kind == "idp":
+            assert manifest.singleton_scope == "global", f"{manifest.name} should stay a stack-global singleton"
+
+
 def test_every_broker_declares_mqtt_wires_with_real_module_slugs() -> None:
     """Every mqtt-broker manifest carries a wires.mqtt block whose module slugs
     resolve in modules.yaml - so the Phase-3 overlay can trust them."""
@@ -225,18 +239,21 @@ def test_postgres_and_mongo_coexist() -> None:
     assert "POSTGRES_IMAGE=" in env and "MONGO_IMAGE=" in env
 
 
-def test_two_databases_same_kind_rejected() -> None:
-    with pytest.raises(ResolveError, match="duplicate database kind"):
-        resolve(
-            ProjectConfig(
-                name="x",
-                database=None,
-                service_instances=[
-                    ServiceInstance(id="db", service="postgres"),
-                    ServiceInstance(id="db2", service="postgres"),
-                ],
-            )
+def test_two_databases_same_kind_allowed_as_distinct_instances() -> None:
+    """Issue #67: same-kind databases get distinct ids (and distinct compose
+    services/containers), so two flat Postgres instances are legal - they only
+    share the per-kind ${POSTGRES_IMAGE} key, which is identical by definition."""
+    resolved = resolve(
+        ProjectConfig(
+            name="x",
+            database=None,
+            service_instances=[
+                ServiceInstance(id="db", service="postgres"),
+                ServiceInstance(id="db2", service="postgres"),
+            ],
         )
+    )
+    assert {inst.id for inst in resolved.service_instances if inst.service == "postgres"} == {"db", "db2"}
 
 
 def test_two_databases_on_one_gateway_rejected() -> None:
@@ -276,8 +293,10 @@ def test_databases_with_mismatched_credentials_rejected() -> None:
         )
 
 
-def test_second_mqtt_broker_rejected() -> None:
-    with pytest.raises(ResolveError, match="only one mqtt-broker"):
+def test_second_attached_mqtt_broker_rejected() -> None:
+    """Issue #67: the single-broker bound is attachment-scoped - two brokers both
+    wired to a gateway still collide on the IIoT seeds and Sparkplug wiring."""
+    with pytest.raises(ResolveError, match="only one attached mqtt-broker"):
         resolve(
             ProjectConfig(
                 name="x",
@@ -286,8 +305,33 @@ def test_second_mqtt_broker_rejected() -> None:
                     ServiceInstance(id="b1", service="emqx"),
                     ServiceInstance(id="b2", service="hivemq"),
                 ],
+                gateways=[
+                    GatewayConfig(
+                        name="gw",
+                        services=[
+                            ServiceAttachment(instance="b1"),
+                            ServiceAttachment(instance="b2"),
+                        ],
+                    )
+                ],
             )
         )
+
+
+def test_flat_second_mqtt_broker_allowed() -> None:
+    """A flat (unattached) extra broker alongside a wired one is legal (#67)."""
+    resolved = resolve(
+        ProjectConfig(
+            name="x",
+            database=None,
+            service_instances=[
+                ServiceInstance(id="b1", service="emqx"),
+                ServiceInstance(id="b2", service="hivemq"),
+            ],
+            gateways=[GatewayConfig(name="gw", services=[ServiceAttachment(instance="b1")])],
+        )
+    )
+    assert {inst.id for inst in resolved.service_instances} >= {"b1", "b2"}
 
 
 def test_second_instance_of_singleton_slug_rejected() -> None:

@@ -46,6 +46,27 @@ _DB_IMAGE_ENV = {
 # loading the service catalog at schema-import time.
 _DB_SERVICE_SLUGS = frozenset(_DB_DEFAULT_IMAGE)
 
+# Environment-variable override keys must be POSIX-shell-safe identifiers: a
+# letter or underscore, then letters/digits/underscores. This is the shape both
+# Docker Compose and the gateway image accept, and it rejects the ``KEY=VALUE``
+# typos (spaces, '=', lowercase shell metacharacters) the wizard prompt invites.
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_env_keys(env: dict[str, str]) -> dict[str, str]:
+    """Reject env-override keys that are not shell-safe identifiers.
+
+    Shared by :class:`GatewayConfig` and :class:`ServiceInstance` so both
+    override surfaces enforce the same vocabulary; a bad key fails loudly at
+    construction (and at the wizard's reconstruct-and-revalidate choke point)
+    rather than emitting a malformed compose ``environment:`` entry.
+    """
+    for key in env:
+        if not _ENV_KEY_RE.match(key):
+            raise ValueError(f"invalid environment-variable key '{key}': must start with a letter or underscore and contain only letters, digits, and underscores")
+    return env
+
+
 # Roles a gateway attachment may declare. Phase 1 only renders "consumer"
 # (a plain DB consumer, the lowering default); "owner" and the two mqtt roles
 # are reserved for the Phase 2-3 Edge invariant + IIoT overlay but are accepted
@@ -91,6 +112,11 @@ class ServiceInstance(BaseModel):
         if not _NAME_RE.match(v):
             raise ValueError("instance id must start with a lowercase letter and contain only lowercase letters, digits, hyphens, or underscores")
         return v
+
+    @field_validator("env")
+    @classmethod
+    def _validate_env(cls, v: dict[str, str]) -> dict[str, str]:
+        return _validate_env_keys(v)
 
     @field_validator("service")
     @classmethod
@@ -250,6 +276,17 @@ class GatewayConfig(BaseModel):
             "validated against builtin_modules.yaml; an unknown slug raises."
         ),
     )
+    env: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Free-form environment-variable overrides emitted verbatim into this "
+            "gateway's compose ``environment:`` block (issue #66 Phase B). Layered "
+            "after the shared x-ignition-environment anchor, so a key here wins "
+            "over the anchor default. The wizard/composer 'env' action prompts "
+            "KEY=VALUE pairs; keys are validated as POSIX-shell-safe identifiers. "
+            "Empty (default) emits nothing, keeping the historical env block."
+        ),
+    )
     redundancy: RedundancyConfig | None = Field(
         default=None,
         description=(
@@ -296,6 +333,11 @@ class GatewayConfig(BaseModel):
         if v not in {"standard", "edge"}:
             raise ValueError("ignition_edition must be 'standard' or 'edge'")
         return v
+
+    @field_validator("env")
+    @classmethod
+    def _validate_env(cls, v: dict[str, str]) -> dict[str, str]:
+        return _validate_env_keys(v)
 
     @field_validator("disable_builtins")
     @classmethod

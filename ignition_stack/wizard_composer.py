@@ -58,14 +58,17 @@ _BROKER_ROLE_CHOICES: list[tuple[str, str]] = [
 ]
 
 # The edit-loop menu. Order is the natural build flow: shape services, then
-# cross-reference, then per-gateway knobs, then finish.
+# cross-reference, then per-block knobs, then finish. The vocabulary is shared
+# with the wizard's services stage (issue #66 Phase B): both entry points drive
+# the same action implementations through :func:`dispatch_action`.
 _ACTIONS: list[tuple[str, str]] = [
-    ("add", "Add a service to a gateway"),
+    ("add", "Add a service (attach to gateways, or leave it flat)"),
     ("share", "Share an existing instance with another gateway"),
-    ("stack", "Add a stack-level service (no gateway attachment)"),
+    ("flat", "Add a flat service (no gateway attachment)"),
     ("remove", "Remove an attachment"),
     ("modules", "Set a gateway's enabled modules"),
     ("edition", "Set a gateway's edition (standard / edge)"),
+    ("env", "Set environment-variable overrides on a gateway or service"),
     ("iiot", "Add or remove IIoT (MQTT/Sparkplug)"),
     ("rename", "Rename an instance"),
     ("done", "Done — review and generate"),
@@ -130,17 +133,24 @@ def edit_loop(
                 options=arch_options,
                 summary_lines=_summary_lines(working),
             )
-        working = _dispatch(action, prompter, working)
+        working = dispatch_action(action, prompter, working)
 
 
-def _dispatch(action: str, prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
+def dispatch_action(action: str, prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
+    """Run one composer action by slug, returning the (possibly unchanged) config.
+
+    The single action table shared by the composer edit loop and the wizard's
+    services stage (issue #66 Phase B), so the two entry points never drift on
+    what 'add' / 'flat' / 'env' do.
+    """
     handlers: dict[str, Callable[[Prompter, ProjectConfig], ProjectConfig]] = {
         "add": _action_add,
         "share": _action_share,
-        "stack": _action_stack,
+        "flat": _action_flat,
         "remove": _action_remove,
         "modules": _action_modules,
         "edition": _action_edition,
+        "env": _action_env,
         "iiot": _action_iiot,
         "rename": _action_rename,
     }
@@ -188,38 +198,141 @@ def _explain(exc: Exception) -> str:
 
 
 def _action_add(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
+    """Add a service: pick it, choose placement (attach-or-flat), wire follow-ups.
+
+    The unified add flow shared by the composer and the wizard's services stage
+    (issue #66 Phase B). Placement (issue #67): the user attaches the service to
+    one or more gateways, or leaves it deliberately flat (no attachment, no
+    seeded config). A single-gateway stack auto-attaches; multi-gateway offers a
+    multi-select. The broker role is asked only when the service actually
+    attaches; n8n offers the MCP drop-in toggle either way.
+    """
     catalog = load_all_services()
-    gw = _pick_gateway(prompter, working, "Add a service to which gateway?")
-    if gw is None:
+    slug = _pick_service(prompter, working, catalog)
+    if slug is None:
         return working
-    choices = service_choices_for_gateway(gw, catalog)
-    if not choices:
-        console.print("[yellow]note[/yellow]: no services are available for that gateway.")
-        return working
-    if _hidden_on_edge(gw, catalog):
-        console.print(f"[dim](databases are hidden: not available on the Edge gateway '{gw.name}')[/dim]")
-    slug = prompter.select("Which service?", choices, default=choices[0][0])
     manifest = catalog[slug]
+    targets = _pick_placement(prompter, working, catalog, slug, manifest)
+    if targets is _CANCELLED:
+        return working
+
     existing = [inst for inst in working.service_instances if inst.service == slug]
+    # Reuse an existing attachment-scoped singleton when attaching (a second
+    # Postgres the user attaches would collide on its per-gateway DB connection);
+    # a flat add always makes a new instance so the spare stands alone.
+    reuse = existing[0] if (manifest.singleton and existing and targets) else None
+    new_id = reuse.id if reuse is not None else _free_instance_id(working, slug)
+    role = _pick_role(prompter, manifest) if targets else "consumer"
+    dropin = _ask_mcp_dropin(prompter, slug, working)
 
-    if manifest.singleton and existing:
-        inst = existing[0]
-        if not prompter.confirm(
-            f"'{slug}' already exists as instance '{inst.id}' (singleton); attach '{gw.name}' to it?",
-            default=True,
-        ):
-            return working
-        role = _pick_role(prompter, manifest)
-        return _try_mutate(working, lambda c: _attach(c, gw.name, inst.id, role))
+    def mutate(c: ProjectConfig) -> None:
+        if reuse is None:
+            c.service_instances.append(ServiceInstance(id=new_id, service=slug))
+        for gw_name in targets:
+            _attach(c, gw_name, new_id, role)
+        if dropin:
+            c.mcp_dropin = True
 
+    return _try_mutate(working, mutate)
+
+
+def _action_flat(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
+    """Add a flat (unattached) service - no gateway attachment, no seeded config.
+
+    Kept as a distinct menu entry for the user who knows up front they want a
+    spare container (issue #67); it is exactly ``add`` with the placement fixed
+    to "don't wire it".
+    """
+    catalog = load_all_services()
+    choices = _all_service_choices(catalog)
+    slug = prompter.select("Add which flat service?", choices, default=choices[0][0])
     new_id = _free_instance_id(working, slug)
-    role = _pick_role(prompter, manifest)
+    dropin = _ask_mcp_dropin(prompter, slug, working)
 
     def mutate(c: ProjectConfig) -> None:
         c.service_instances.append(ServiceInstance(id=new_id, service=slug))
-        _attach(c, gw.name, new_id, role)
+        if dropin:
+            c.mcp_dropin = True
 
     return _try_mutate(working, mutate)
+
+
+# Sentinel distinguishing "the user cancelled the placement prompt" from "the
+# user chose the empty (flat) placement", since both are falsy target lists.
+_CANCELLED = object()
+
+
+def _pick_service(prompter: Prompter, working: ProjectConfig, catalog: dict[str, ServiceManifest]) -> str | None:
+    """Pick a catalog service from the kind-grouped labels, or None if none fit.
+
+    Offers the full catalog (every kind), because placement - not the gateway -
+    decides where the instance lands. The Edge-on-database guard moves to the
+    placement step, which simply omits Edge gateways as attach targets for a
+    ``never_on_edge`` service.
+    """
+    choices = _all_service_choices(catalog)
+    if not choices:
+        console.print("[yellow]note[/yellow]: no services are available.")
+        return None
+    return prompter.select("Which service?", choices, default=choices[0][0])
+
+
+def _pick_placement(
+    prompter: Prompter,
+    working: ProjectConfig,
+    catalog: dict[str, ServiceManifest],
+    slug: str,
+    manifest: ServiceManifest,
+) -> object:
+    """Resolve where a new service lands: a list of gateway names, or [] for flat.
+
+    Returns :data:`_CANCELLED` when the user backs out. A ``never_on_edge``
+    service (databases) drops Edge gateways from the eligible attach set; if that
+    leaves no eligible gateway, only the flat option remains. A single eligible
+    gateway auto-attaches without a prompt (after confirming attach-vs-flat);
+    multiple eligible gateways get a multi-select.
+    """
+    eligible = [gw for gw in working.gateways if not (manifest.placement.never_on_edge and gw.ignition_edition == "edge")]
+    blocked = [gw for gw in working.gateways if gw not in eligible]
+    if blocked:
+        names = ", ".join(gw.name for gw in blocked)
+        console.print(f"[dim](Edge gateways {names} cannot attach to '{slug}' and are not offered)[/dim]")
+
+    if not eligible:
+        console.print(f"[dim]'{slug}' has no eligible gateway; adding it flat (no attachment)[/dim]")
+        return []
+
+    mode = prompter.select(
+        f"Where should '{slug}' go?",
+        [
+            ("attach", "Attach to gateway(s)"),
+            ("flat", "Don't wire it (flat, no attachment)"),
+        ],
+        default="attach",
+    )
+    if mode == "flat":
+        return []
+
+    if len(eligible) == 1:
+        return [eligible[0].name]
+
+    triples = [(gw.name, f"{gw.name} ({gw.ignition_edition}{', ' + gw.role if gw.role else ''})", True) for gw in eligible]
+    chosen = prompter.checkbox(f"Attach '{slug}' to which gateways?", triples)
+    # Empty multi-select means the user unchecked everything: treat as flat so
+    # they still get the instance rather than a silent no-op.
+    return list(chosen)
+
+
+def _ask_mcp_dropin(prompter: Prompter, slug: str, working: ProjectConfig) -> bool:
+    """Offer the Ignition MCP module drop-in when adding n8n (issue #66 Phase B).
+
+    Restores the wizard access lost when the mcp-n8n profile was removed in Phase
+    A: n8n drives MCP workflows, and ``mcp_dropin`` scaffolds the EA module's
+    drop-in dir. Only asked for n8n, and only when the flag is not already set.
+    """
+    if slug != "n8n" or working.mcp_dropin:
+        return False
+    return prompter.confirm("Scaffold the Ignition MCP module drop-in (modules/dropin/) for n8n?", default=False)
 
 
 def _action_share(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
@@ -242,19 +355,6 @@ def _action_share(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
         return working
     role = _pick_role(prompter, manifest)
     return _try_mutate(working, lambda c: _attach(c, gw.name, inst.id, role))
-
-
-def _action_stack(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
-    catalog = load_all_services()
-    choices = _all_service_choices(catalog)
-    slug = prompter.select("Add which stack-level service?", choices, default=choices[0][0])
-    manifest = catalog[slug]
-    existing = [inst for inst in working.service_instances if inst.service == slug]
-    if manifest.singleton and existing:
-        console.print(f"[red]error[/red]: '{slug}' is a singleton and already exists as '{existing[0].id}'.")
-        return working
-    new_id = _free_instance_id(working, slug)
-    return _try_mutate(working, lambda c: c.service_instances.append(ServiceInstance(id=new_id, service=slug)))
 
 
 def _action_remove(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
@@ -310,6 +410,74 @@ def _action_edition(prompter: Prompter, working: ProjectConfig) -> ProjectConfig
         target.ignition_edition = edition
 
     return _try_mutate(working, mutate)
+
+
+def _action_env(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:
+    """Set environment-variable overrides on a gateway or a service instance.
+
+    Both ``GatewayConfig`` and ``ServiceInstance`` carry a free-form ``env`` dict
+    (issue #66 Phase B); a gateway's overrides land in its compose
+    ``environment:`` block, a service instance's in its ``.env`` keys. The prompt
+    collects ``KEY=VALUE`` lines until a blank one, layering them over whatever
+    the target already carries. Key format is validated by the model's
+    reconstruct-and-revalidate pass, so a bad key surfaces as one error line and
+    leaves state intact.
+    """
+    targets: list[tuple[str, str]] = [(f"gw:{gw.name}", f"gateway {gw.name}") for gw in working.gateways]
+    targets += [(f"inst:{inst.id}", f"service {inst.id} ({inst.service})") for inst in working.service_instances]
+    if not targets:
+        console.print("[yellow]note[/yellow]: nothing to set env overrides on yet.")
+        return working
+    picked = prompter.select("Set env overrides on which block?", targets, default=targets[0][0])
+    kind, _, ref = picked.partition(":")
+    current = _env_for_target(working, kind, ref)
+    overrides = _prompt_env_overrides(prompter, current)
+    if not overrides:
+        return working
+
+    def mutate(c: ProjectConfig) -> None:
+        if kind == "gw":
+            target = next(g for g in c.gateways if g.name == ref)
+            target.env = {**target.env, **overrides}
+        else:
+            inst = next(i for i in c.service_instances if i.id == ref)
+            inst.env = {**inst.env, **overrides}
+
+    return _try_mutate(working, mutate)
+
+
+def _env_for_target(working: ProjectConfig, kind: str, ref: str) -> dict[str, str]:
+    if kind == "gw":
+        return dict(next(g.env for g in working.gateways if g.name == ref))
+    return dict(next(i.env for i in working.service_instances if i.id == ref))
+
+
+def _prompt_env_overrides(prompter: Prompter, current: dict[str, str]) -> dict[str, str]:
+    """Collect KEY=VALUE override lines until a blank entry; merge over ``current``.
+
+    Returns only the *new/changed* pairs (the caller merges), so an empty session
+    is a no-op. A line missing '=' or with an empty key is skipped with a note;
+    full key-format validation is left to the model so the rule lives in one place.
+    """
+    if current:
+        shown = ", ".join(f"{k}={v}" for k, v in sorted(current.items()))
+        console.print(f"[dim]current overrides: {shown}[/dim]")
+    console.print("[dim]Enter KEY=VALUE lines; blank line to finish.[/dim]")
+    collected: dict[str, str] = {}
+    while True:
+        line = prompter.text("KEY=VALUE (blank to finish)", default="").strip()
+        if not line:
+            break
+        if "=" not in line:
+            console.print("[yellow]note[/yellow]: expected KEY=VALUE; skipped.")
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key:
+            console.print("[yellow]note[/yellow]: empty key; skipped.")
+            continue
+        collected[key] = value.strip()
+    return collected
 
 
 def _action_iiot(prompter: Prompter, working: ProjectConfig) -> ProjectConfig:

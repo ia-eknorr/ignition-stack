@@ -39,6 +39,9 @@
     GATEWAY_NETWORK_{{ loop.index0 }}_PORT: "{{ conn.port }}"
     GATEWAY_NETWORK_{{ loop.index0 }}_ENABLESSL: "false"
 {%- endfor %}
+{%- for key, value in env_overrides.items() %}
+    {{ key }}: "{{ value }}"
+{%- endfor %}
   command: >
 {%- if rename %}
     -n {{ gateway_name_ref }}

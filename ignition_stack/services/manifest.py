@@ -169,7 +169,20 @@ class ServiceManifest(BaseModel):
             "True when a stack may hold at most one instance of this service. "
             "Databases / IDPs / brokers are singletons: a second instance of the "
             "same slug would collide on its per-kind env keys and seed paths. The "
-            "resolver enforces it across the registry."
+            "resolver enforces it within the scope named by ``singleton_scope``."
+        ),
+    )
+    singleton_scope: Literal["global", "attached"] = Field(
+        default="global",
+        description=(
+            "Where the ``singleton`` bound applies (issue #67). 'global' (default) "
+            "permits at most one instance of this service anywhere in the stack - "
+            "the right shape for a genuinely stack-global service like Keycloak, "
+            "whose KEYCLOAK_* env keys and realm seed are shared. 'attached' relaxes "
+            "the bound to *attached* instances only, so the user may stand up an "
+            "extra deliberately-unattached (flat) instance alongside the wired one - "
+            "a second Postgres they will connect by hand, a Kafka broker to "
+            "experiment with. Databases and brokers set 'attached'."
         ),
     )
     placement: PlacementSpec = Field(

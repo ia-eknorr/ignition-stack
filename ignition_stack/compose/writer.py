@@ -435,6 +435,12 @@ def _render_env(config: ProjectConfig) -> str:
         lines.append(f"{manifest.image_env}={inst.image}")
         for key, value in manifest.env.items():
             lines.append(f"{key}={inst.env.get(key, value)}")
+        # Per-instance env overrides beyond the manifest's preset keys (issue #66
+        # Phase B): emit them too, sorted, so a user-set KEY=VALUE the fragment
+        # references reaches the container. Manifest keys are already emitted
+        # above (overridden in place), so only the extras remain here.
+        for key in sorted(set(inst.env) - set(manifest.env)):
+            lines.append(f"{key}={inst.env[key]}")
 
     lines.append(f"TZ={config.timezone}")
     return "\n".join(lines) + "\n"

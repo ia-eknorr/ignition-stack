@@ -14,6 +14,9 @@ seeds_gateway_resources: false
 # One MQTT broker per stack; wires block names the Cirrus Link modules + the
 # Sparkplug-capable MQTT port the Phase-3 IIoT overlay consumes.
 singleton: true
+# issue #67: relax the singleton bound to attached instances, so a
+# deliberately-unattached (flat) duplicate may sit alongside the wired one.
+singleton_scope: attached
 wires:
   mqtt:
     transmission_module: mqtt-transmission

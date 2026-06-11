@@ -13,6 +13,9 @@ env: {}
 seeds_gateway_resources: false
 # One database per stack; never on an Edge gateway (see postgres manifest).
 singleton: true
+# issue #67: relax the singleton bound to attached instances, so a
+# deliberately-unattached (flat) duplicate may sit alongside the wired one.
+singleton_scope: attached
 placement:
   never_on_edge: true
 post_setup: []

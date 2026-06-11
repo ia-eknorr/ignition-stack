@@ -32,7 +32,7 @@ from ignition_stack.config.schema import (
     ServiceAttachment,
     ServiceInstance,
 )
-from ignition_stack.services.resolver import ResolveError, resolve
+from ignition_stack.services.resolver import resolve
 
 # --------------------------------------------------------------------------- #
 # Lowering: legacy fields -> registry, then cleared
@@ -130,9 +130,11 @@ def test_jdbc_driver_attaches_only_to_db_attached_gateways() -> None:
         assert "mysql-jdbc" in gw.modules
 
 
-def test_two_databases_of_the_same_kind_rejected() -> None:
-    """Phase 2 allows multiple databases only of DISTINCT kinds; two postgres
-    collide on the per-kind ${POSTGRES_IMAGE} and shared DB_USER/DB_PASSWORD."""
+def test_two_databases_of_the_same_kind_allowed() -> None:
+    """Issue #67: two same-kind databases are legal - each instance has a distinct
+    id (so a distinct compose service + container) and they share only the
+    per-kind ${POSTGRES_IMAGE} key plus the stack-wide DB_USER/DB_PASSWORD, all of
+    which are identical by definition. The user attaches the spare by hand."""
     config = ProjectConfig(
         name="x",
         database=None,
@@ -141,8 +143,8 @@ def test_two_databases_of_the_same_kind_rejected() -> None:
             ServiceInstance(id="db2", service="postgres"),
         ],
     )
-    with pytest.raises(ResolveError, match="duplicate database kind"):
-        resolve(config)
+    resolved = resolve(config)
+    assert {inst.id for inst in resolved.service_instances if inst.service == "postgres"} == {"db", "db2"}
 
 
 # --------------------------------------------------------------------------- #

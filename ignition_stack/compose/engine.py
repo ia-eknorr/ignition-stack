@@ -370,6 +370,9 @@ def _ignition_context(ctx: dict[str, object], config: ProjectConfig, multi: bool
         "rename": not is_backup,
         "gan_incoming": gan_incoming,
         "gan_outgoing": gan_outgoing,
+        # Free-form per-gateway env overrides (issue #66 Phase B), emitted last in
+        # the environment block so they win over the anchor and the keys above.
+        "env_overrides": dict(gw.env),
     }
 
 

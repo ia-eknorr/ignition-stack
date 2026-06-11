@@ -146,35 +146,43 @@ def _attach_all_gateways(
 
 
 def _validate_registry(config: ProjectConfig, catalog: dict[str, ServiceManifest]) -> None:
-    """Enforce the Phase-2 multi-instance bounds across the registry.
+    """Enforce the multi-instance bounds across the registry.
 
-    Phase 2 relaxes the old single-database rule but only within a bounded
-    scope, because the compose fragments and .env share a per-kind/global key
-    vocabulary that collides outside these bounds:
+    The compose fragments and .env share a per-kind/global key vocabulary, so a
+    handful of bounds keep that vocabulary from colliding. Issue #67 scopes the
+    *singleton* bounds to **attachments** wherever a deliberately-unattached
+    (flat) instance is harmless, so a user can stand up a spare service the CLI
+    will not wire (a second Postgres to connect by hand, a Kafka broker to poke
+    at). The bounds that still bite every instance, attached or not, are the ones
+    a flat instance genuinely cannot dodge:
 
-    - **Multiple databases allowed iff distinct kinds.** Two ``postgres``
-      instances would both want ``${POSTGRES_IMAGE}`` and the shared
-      ``${DB_USER}`` / ``${DB_PASSWORD}`` keys - same-kind duplicates collide.
     - **All databases share one user/password** - the fragments read the single
-      shared ``DB_USER`` / ``DB_PASSWORD`` pair.
+      shared ``DB_USER`` / ``DB_PASSWORD`` pair, so even a flat database's
+      credentials must match (it renders the same shared keys).
     - **At most one database attachment per gateway** - a gateway seeds one
-      ``internal-secret-provider``; a second db's secret would overwrite it.
-    - **Singletons** (``singleton: true`` manifests: db / idp / broker) appear at
-      most once per slug.
-    - **At most one mqtt-broker instance** per stack (multi-broker is a non-goal).
+      ``internal-secret-provider``; a second db's secret would overwrite it. This
+      is already attachment-scoped and stays as-is.
+    - **Globally-scoped singletons** (``singleton_scope: global``: Keycloak)
+      appear at most once per slug, attached or not - their KEYCLOAK_* env keys
+      and realm seed are stack-global.
+    - **Attachment-scoped singletons** (``singleton_scope: attached``: every
+      database and broker) permit at most one *attached* instance per slug; an
+      additional flat instance of the same slug is legal.
+    - **At most one *attached* mqtt-broker** - the IIoT seeds and Sparkplug
+      wiring assume a single wired broker, but a flat extra broker is fine.
+
+    Same-kind database duplicates are no longer rejected outright: the registry
+    gives each instance a distinct ``id`` (and thus a distinct compose service +
+    container), so two Postgres instances render as two containers that merely
+    share the per-kind ``${POSTGRES_IMAGE}`` key (identical by definition) and the
+    shared credentials checked below.
     """
     instances = config.service_instances
     db_instances = [inst for inst in instances if catalog[inst.service].kind == "database"]
 
-    db_kinds = [inst.service for inst in db_instances]
-    dup_kinds = sorted({k for k in db_kinds if db_kinds.count(k) > 1})
-    if dup_kinds:
-        raise ResolveError(
-            f"duplicate database kind(s) {dup_kinds}: two instances of the same "
-            "database kind collide on the per-kind image and shared "
-            "DB_USER/DB_PASSWORD .env keys, so same-kind duplicates are not "
-            "supported; use distinct database kinds"
-        )
+    # The set of instance ids that some gateway attaches to. Attachment-scoped
+    # bounds count only these; flat (unattached) instances are exempt (issue #67).
+    attached_ids = {att.instance for gw in config.gateways for att in gw.services}
 
     credentials = {(inst.user, inst.password) for inst in db_instances}
     if len(credentials) > 1:
@@ -195,18 +203,36 @@ def _validate_registry(config: ProjectConfig, catalog: dict[str, ServiceManifest
                 "(the seeded internal-secret-provider would collide)"
             )
 
-    singleton_counts: dict[str, int] = {}
+    # Singletons: count globally for singleton_scope == "global" (Keycloak), but
+    # only across *attached* instances for singleton_scope == "attached" (db /
+    # broker), so a flat duplicate is allowed (issue #67).
+    global_counts: dict[str, int] = {}
+    attached_counts: dict[str, int] = {}
     for inst in instances:
-        if catalog[inst.service].singleton:
-            singleton_counts[inst.service] = singleton_counts.get(inst.service, 0) + 1
-    over = sorted(slug for slug, count in singleton_counts.items() if count > 1)
-    if over:
-        raise ResolveError(f"service(s) {over} are singletons (singleton: true) but the registry declares more than one instance of each; declare a single instance")
+        manifest = catalog[inst.service]
+        if not manifest.singleton:
+            continue
+        if manifest.singleton_scope == "global":
+            global_counts[inst.service] = global_counts.get(inst.service, 0) + 1
+        elif inst.id in attached_ids:
+            attached_counts[inst.service] = attached_counts.get(inst.service, 0) + 1
+    over_global = sorted(slug for slug, count in global_counts.items() if count > 1)
+    if over_global:
+        raise ResolveError(f"service(s) {over_global} are stack-global singletons but the registry declares more than one instance of each; declare a single instance")
+    over_attached = sorted(slug for slug, count in attached_counts.items() if count > 1)
+    if over_attached:
+        raise ResolveError(
+            f"service(s) {over_attached} are singletons but the registry attaches "
+            "more than one instance of each to a gateway; a second instance may "
+            "exist only if it is left unattached (flat)"
+        )
 
-    brokers = [inst for inst in instances if catalog[inst.service].kind == "mqtt-broker"]
-    if len(brokers) > 1:
-        kinds = ", ".join(inst.service for inst in brokers)
-        raise ResolveError(f"only one mqtt-broker is supported per stack, but the registry has {len(brokers)} ({kinds}); multi-broker stacks are a non-goal")
+    attached_brokers = [inst for inst in instances if catalog[inst.service].kind == "mqtt-broker" and inst.id in attached_ids]
+    if len(attached_brokers) > 1:
+        kinds = ", ".join(inst.service for inst in attached_brokers)
+        raise ResolveError(
+            f"only one attached mqtt-broker is supported per stack, but {len(attached_brokers)} are wired ({kinds}); " "leave the extra broker unattached (flat) or remove it"
+        )
 
 
 def _expand_redundancy(config: ProjectConfig) -> None:
@@ -240,6 +266,7 @@ def _expand_redundancy(config: ProjectConfig) -> None:
                 http_port=next_port,
                 modules=list(master.modules),
                 disable_builtins=list(master.disable_builtins),
+                env=dict(master.env),
                 services=[att.model_copy(deep=True) for att in master.services],
                 redundancy=RedundancyConfig(
                     mode="backup",

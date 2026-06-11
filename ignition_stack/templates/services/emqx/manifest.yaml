@@ -17,6 +17,9 @@ seeds_gateway_resources: false
 # block names the Cirrus Link Transmission/Engine modules the Phase-3 IIoT
 # overlay fans out, plus the Sparkplug-capable MQTT port (1883).
 singleton: true
+# issue #67: relax the singleton bound to attached instances, so a
+# deliberately-unattached (flat) duplicate may sit alongside the wired one.
+singleton_scope: attached
 wires:
   mqtt:
     transmission_module: mqtt-transmission

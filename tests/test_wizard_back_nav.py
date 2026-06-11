@@ -84,12 +84,16 @@ def test_back_changes_an_earlier_answer_and_replays_prior_default() -> None:
             False,  # iiot
             False,  # modules
             "ports",  # exposure
+            False,  # services stage: add a service? -> no
             "generate",  # summary
         ]
     )
     outcome = walk("demo", prompter)
     assert outcome.confirmed
-    assert outcome.config.database is not None and outcome.config.database.kind == "mysql"
+    # The wizard returns a resolved config (the services stage resolves it), so
+    # the database lives in the registry, not the legacy ``database`` shim.
+    db = outcome.config.database_instance()
+    assert db is not None and db.service == "mysql"
 
     # The database prompt was shown twice; the second time its default replayed
     # the prior answer (postgres) instead of resetting to the canonical default.
@@ -114,6 +118,7 @@ def test_architecture_step_offers_no_back() -> None:
             False,
             False,
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -132,9 +137,9 @@ def test_architecture_step_offers_no_back() -> None:
 
 
 def test_back_at_summary_returns_to_last_question(monkeypatch) -> None:
-    """Choosing Back at the summary drops the user on the exposure step (the
-    last question), where re-answering with a reverse proxy changes the config
-    instead of cancelling."""
+    """Choosing Back at the summary drops the user on the services stage (the
+    last step); backing again from its "Add a service?" reaches exposure, where
+    re-answering with a reverse proxy changes the config instead of cancelling."""
     monkeypatch.setattr("ignition_stack.wizard._detect_proxy_network", lambda: [])
     prompter = ScriptedPrompter(
         [
@@ -145,10 +150,13 @@ def test_back_at_summary_returns_to_last_question(monkeypatch) -> None:
             False,  # iiot
             False,  # modules
             "ports",  # exposure -> host ports
-            BACK,  # summary -> back to the last question (exposure)
+            False,  # services stage: add a service? -> no
+            BACK,  # summary -> back to the services stage "Add a service?"
+            BACK,  # services stage "Add a service?" -> back to exposure
             "proxy",  # exposure (re-asked) -> reverse proxy
             "named",  # name an existing network
             "edge-net",  # network name
+            False,  # services stage: add a service? -> no
             "generate",  # summary
         ]
     )
@@ -178,6 +186,7 @@ def test_skipped_step_is_skipped_when_backing() -> None:
             False,  # iiot
             False,  # modules
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -214,6 +223,7 @@ def test_changing_architecture_adds_spoke_count_and_drops_stale_edge_role() -> N
             False,  # iiot
             False,  # modules
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )

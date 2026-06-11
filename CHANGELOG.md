@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Services are now a first-class stage in the main wizard flow.** After
+  exposure and before the summary, the wizard loops "Add a service?": pick from
+  the kind-grouped catalog, choose where it goes, answer only the questions that
+  service needs, and repeat. The recorded selections build the resolved config
+  directly — no detour through the composer required. The composer remains the
+  summary's **Tweak** destination, and the two now share one set of action
+  implementations (`add` / `share` / `flat` / `remove` / `modules` / `edition` /
+  `env` / `iiot` / `rename`).
+- **Flat (unattached) services.** When adding a service you choose its
+  placement: attach it to one or more gateways (a multi-select for multi-gateway
+  architectures, auto-attach for a single gateway), or leave it deliberately
+  unwired. A flat service still renders fully into `docker-compose.yaml` (image,
+  env, healthcheck, networks) so you can connect it by hand — a Kafka broker to
+  experiment with, a second Postgres you'll wire yourself. The resolver's
+  single-broker / one-database-kind / singleton bounds are now scoped to
+  *attachments*: a flat second Postgres alongside the attached one is legal, as
+  is a flat extra broker, while genuinely stack-global singletons (Keycloak)
+  stay capped at one. Manifests express this with a new `singleton_scope`
+  (`global` | `attached`) field.
+- **Per-block environment-variable overrides.** A new `env` composer/services
+  action sets free-form `KEY=VALUE` overrides on a gateway or a service
+  instance. Keys are validated as shell-safe identifiers; a gateway's overrides
+  emit into its compose `environment:` block, a service instance's into the
+  project `.env`. Both round-trip through dump/load. `GatewayConfig` gains an
+  `env` dict to carry them (the model already accepted per-instance `env`).
+- **n8n MCP drop-in is reachable again.** Adding n8n offers the Ignition MCP
+  module drop-in toggle, which scaffolds `modules/dropin/`. This restores the
+  capability the removed `mcp-n8n` profile provided, now expressible as Basic +
+  n8n + MCP drop-in.
+
 ### Changed
 
 - **Profiles are now architectures, mirroring Ignition's own vocabulary.** The
