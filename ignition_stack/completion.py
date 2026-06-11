@@ -33,15 +33,16 @@ def complete_edge_role(incomplete: str) -> list[str]:
     return [role for role in EDGE_ROLE_VALUES if role.startswith(incomplete)]
 
 
-# Reverse-proxy kinds the CLI can scaffold. Mirrors ReverseProxyConfig.kind
-# (only Traefik exists today); kept here as the completion vocabulary since
-# the Literal lives in the pydantic model, not a runtime registry.
-REVERSE_PROXY_VALUES = ("traefik",)
+# Reverse-proxy modes the CLI accepts. Mirrors ReverseProxyConfig.mode:
+# 'external' joins a proxy the user runs; 'scaffold' also lays down the
+# ia-eknorr/traefik-reverse-proxy README. Kept here as the completion vocabulary
+# since the Literal lives in the pydantic model, not a runtime registry.
+REVERSE_PROXY_VALUES = ("external", "scaffold")
 
 
 def complete_reverse_proxy(incomplete: str) -> list[str]:
-    """Reverse-proxy kind names matching the typed prefix."""
-    return [kind for kind in REVERSE_PROXY_VALUES if kind.startswith(incomplete)]
+    """Reverse-proxy mode names matching the typed prefix."""
+    return [mode for mode in REVERSE_PROXY_VALUES if mode.startswith(incomplete)]
 
 
 def complete_iiot_broker(incomplete: str) -> list[tuple[str, str]]:

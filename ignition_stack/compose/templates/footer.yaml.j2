@@ -2,11 +2,15 @@ volumes:
 {%- for vol in volumes %}
   {{ vol }}:
 {%- endfor %}
-{%- if networks %}
+{%- if networks or external_networks %}
 
 networks:
 {%- for net in networks %}
   {{ net }}:
     driver: bridge
+{%- endfor %}
+{%- for net in external_networks %}
+  {{ net }}:
+    external: true
 {%- endfor %}
 {%- endif %}

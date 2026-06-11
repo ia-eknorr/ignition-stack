@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Reverse proxy now actually routes the gateways.** The wizard's proxy
+  question is redesigned: the first prompt is exposure — host ports (default) or
+  a reverse proxy. Choosing the proxy detects an existing `proxy` Docker network
+  (the one `ia-eknorr/traefik-reverse-proxy` creates) and offers to join it,
+  otherwise asks for the network name or scaffolds the repo. When a proxy is
+  selected the compose engine attaches every gateway to the external proxy
+  network and emits the Traefik labels Traefik needs — `traefik.enable=true`, a
+  project-scoped `Host(<project>[-<gateway>].localtest.me)` router rule, the
+  `web` entrypoint, and `loadbalancer.server.port=8088` — and drops the
+  host-port publish (the proxy is the front door). Previously every proxy option
+  was a no-op that only wrote a README. `ReverseProxyConfig` gains `mode`
+  (`external` / `scaffold`) and `network`; `init` gains `--proxy-network` and its
+  `--reverse-proxy` flag now takes the mode. The two redundant wizard options
+  ("external" / "skip", both no-ops) are gone.
+
 ## [0.5.0] - 2026-06-11
 
 ### Added

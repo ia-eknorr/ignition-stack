@@ -40,7 +40,9 @@ Quick-track step order:
    are pre-checked; the un-selected remainder becomes ``disable_builtins``,
    which the engine inverts into the GATEWAY_MODULES_ENABLED whitelist. Gated
    behind a "Customize?" confirm; declining accepts the lean default.
-9. **Reverse proxy** - existing/install-Traefik/skip.
+9. **Exposure** - host ports (default) or a reverse proxy. Choosing the proxy
+   detects an existing ``proxy`` Docker network and offers to join it, else asks
+   for the network name or scaffolds ``ia-eknorr/traefik-reverse-proxy``.
 10. **Summary** - a three-way select: *generate* (write the project),
     *tweak* (hand the built+resolved config to the Custom composer pre-filled),
     or *cancel* (abort).
@@ -462,23 +464,75 @@ def _edition_choices_for(profile_slug: str) -> list[tuple[str, str]]:
     ]
 
 
+# The network ia-eknorr/traefik-reverse-proxy creates by default. Detecting it
+# lets the wizard offer "join the proxy you already run" before asking anything.
+_DEFAULT_PROXY_NETWORK = "proxy"
+
+
+def _detect_proxy_network() -> list[str]:
+    """Docker network names on this host, or [] when Docker is unreachable.
+
+    Kept as a module-level seam (the wizard's pure ``walk`` never shells out
+    directly) so tests monkeypatch this one function and stay TTY/Docker-free.
+    Degrades silently: a missing ``docker`` binary, a dead daemon, or a non-zero
+    exit all return [] so the wizard falls through to the manual question.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["docker", "network", "ls", "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
 def _ask_reverse_proxy(prompter: Prompter) -> ReverseProxyConfig | None:
-    choice = prompter.select(
-        "Reverse proxy?",
+    """Proxy vs. host ports, with detection of an existing proxy network.
+
+    Host ports (the default, least-surprising answer) returns ``None`` - today's
+    plain ``localhost:<port>`` mapping. Choosing the proxy detects a ``proxy``
+    network (``ia-eknorr/traefik-reverse-proxy``'s default) and offers to join
+    it; otherwise the user names their proxy's network or scaffolds the repo.
+    """
+    mode = prompter.select(
+        "Expose gateways via",
         [
-            ("external", "Use an existing reverse proxy"),
-            ("install", "Install ia-eknorr/traefik-reverse-proxy"),
-            ("skip", "Skip — exposed directly on a host port"),
+            ("ports", "Host ports"),
+            ("proxy", "Reverse proxy"),
         ],
-        default="external",
+        default="ports",
     )
-    if choice != "install":
+    if mode == "ports":
         return None
-    path = prompter.text(
-        "Where should the proxy live? (relative path under the project)",
-        default="reverse-proxy",
+
+    networks = _detect_proxy_network()
+    if _DEFAULT_PROXY_NETWORK in networks and prompter.confirm(
+        f"Join the existing '{_DEFAULT_PROXY_NETWORK}' network?",
+        default=True,
+    ):
+        return ReverseProxyConfig(mode="external", network=_DEFAULT_PROXY_NETWORK)
+
+    source = prompter.select(
+        "Proxy network",
+        [
+            ("named", "Name an existing network"),
+            ("scaffold", "Scaffold ia-eknorr/traefik-reverse-proxy"),
+        ],
+        default="named",
     )
-    return ReverseProxyConfig(kind="traefik", path=path)
+    if source == "scaffold":
+        path = prompter.text("Scaffold path", default="reverse-proxy")
+        return ReverseProxyConfig(mode="scaffold", network=_DEFAULT_PROXY_NETWORK, path=path)
+    network = prompter.text("Network name", default=_DEFAULT_PROXY_NETWORK)
+    return ReverseProxyConfig(mode="external", network=network)
 
 
 def _confirm_advisory_if_needed(prompter: Prompter, options: ProfileOptions) -> ProfileOptions:
@@ -525,13 +579,22 @@ def _summarize(config: ProjectConfig, profile_slug: str, options: ProfileOptions
         "redundancy   : " + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
         "iiot         : " + (f"{options.iiot_broker or 'chariot'} (Transmission/Engine overlay)" if options.iiot else "off"),
         "modules      : " + _enabled_modules_label(options.disable_builtins),
-        "reverse proxy: " + (f"install Traefik at './{config.reverse_proxy.path}'" if config.reverse_proxy else "external (plain host-port mapping)"),
+        "exposure     : " + _proxy_label(config.reverse_proxy),
     ]
     if config.mcp_dropin:
         lines.append("MCP dropin   : modules/dropin/ (EA-gated; see POST-SETUP.md)")
     if options.force:
         lines.append("advisory     : --force acknowledged")
     return lines
+
+
+def _proxy_label(proxy: ReverseProxyConfig | None) -> str:
+    """Summary-line rendering of the exposure choice."""
+    if proxy is None:
+        return "host ports"
+    if proxy.mode == "scaffold":
+        return f"reverse proxy — scaffold Traefik at './{proxy.path}', network '{proxy.network}'"
+    return f"reverse proxy — join network '{proxy.network}'"
 
 
 def _enabled_modules_label(disable_builtins: tuple[str, ...]) -> str:

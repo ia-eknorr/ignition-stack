@@ -481,7 +481,9 @@ exposes the Ignition side of the conversation to n8n's workflows.
 
 
 def _write_reverse_proxy_readme(config: ProjectConfig, target_dir: Path) -> Path | None:
-    if config.reverse_proxy is None:
+    # Only scaffold mode lays down the clone-me README; external mode joins a
+    # proxy the user already runs, so there is nothing to scaffold.
+    if config.reverse_proxy is None or config.reverse_proxy.mode != "scaffold":
         return None
     proxy_dir = target_dir / config.reverse_proxy.path
     proxy_dir.mkdir(parents=True, exist_ok=True)

@@ -315,8 +315,8 @@ def test_scaleout_cli_two_frontends_no_split(tmp_path: Path) -> None:
     assert "networks" not in parsed or not parsed["networks"]
 
 
-def test_scaleout_cli_reverse_proxy_traefik(tmp_path: Path) -> None:
-    """--reverse-proxy traefik scaffolds the proxy README at the default path."""
+def test_scaleout_cli_reverse_proxy_scaffold(tmp_path: Path) -> None:
+    """--reverse-proxy scaffold lays down the proxy README at the default path."""
     runner = CliRunner()
     result = runner.invoke(
         app,
@@ -326,7 +326,7 @@ def test_scaleout_cli_reverse_proxy_traefik(tmp_path: Path) -> None:
             "--profile",
             "scaleout",
             "--reverse-proxy",
-            "traefik",
+            "scaffold",
             "-o",
             str(tmp_path),
         ],
@@ -335,6 +335,40 @@ def test_scaleout_cli_reverse_proxy_traefik(tmp_path: Path) -> None:
     readme = tmp_path / "demo" / "reverse-proxy" / "README.md"
     assert readme.is_file()
     assert "ia-eknorr/traefik-reverse-proxy" in readme.read_text(encoding="utf-8")
+
+
+def test_cli_reverse_proxy_external_with_network(tmp_path: Path) -> None:
+    """--reverse-proxy external --proxy-network joins that network, no scaffold."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "demo",
+            "--profile",
+            "standalone",
+            "--reverse-proxy",
+            "external",
+            "--proxy-network",
+            "edge-net",
+            "-o",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert not (tmp_path / "demo" / "reverse-proxy").exists()
+    parsed = _parse((tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8"))
+    assert parsed["networks"]["edge-net"] == {"external": True}
+
+
+def test_cli_reverse_proxy_bad_mode_exits_two(tmp_path: Path) -> None:
+    """An unknown --reverse-proxy mode is a clean usage error, not a traceback."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["init", "demo", "--profile", "standalone", "--reverse-proxy", "traefik", "-o", str(tmp_path)],
+    )
+    assert result.exit_code == 2
 
 
 # --------------------------------------------------------------------------- #
@@ -499,7 +533,7 @@ def test_mcp_n8n_wizard_flow_writes_expected_project(tmp_path: Path) -> None:
             "none",  # edge_role
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",  # reverse proxy
+            "ports",  # exposure: host ports
             "generate",  # summary action
         ]
     )
@@ -526,62 +560,190 @@ def test_mcp_n8n_golden() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Reverse-proxy prompt (Phase 6 validation 4)
+# Reverse-proxy: host ports vs. proxy, with detection
 # --------------------------------------------------------------------------- #
 
 
-def test_external_proxy_emits_plain_host_port_mapping(tmp_path: Path) -> None:
-    """The 'I already have one' branch -> no proxy service, plain ports."""
+def test_host_ports_emit_plain_mapping(tmp_path: Path) -> None:
+    """No reverse_proxy -> plain host:container mapping, no labels, no proxy net."""
     config = build_profile("standalone", "demo", ProfileOptions(reverse_proxy=None))
     write_project(config, tmp_path / "demo")
     compose = (tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8")
     parsed = _parse(compose)
-    services = parsed["services"]
-    # Gateway has the plain host:container mapping; no proxy service in the file.
-    assert "ports" in services["gateway"]
-    assert "reverse-proxy" not in services
-    assert "traefik" not in services
-    # And no proxy scaffold was written.
+    gateway = parsed["services"]["gateway"]
+    assert "ports" in gateway
+    assert "labels" not in gateway
+    assert "networks" not in parsed or "proxy" not in (parsed.get("networks") or {})
     assert not (tmp_path / "demo" / "reverse-proxy").exists()
 
 
-def test_install_traefik_emits_scaffold_at_chosen_path(tmp_path: Path) -> None:
-    """The 'install Traefik' branch -> reverse-proxy/README.md at chosen path."""
+def test_external_proxy_emits_labels_and_drops_host_port(tmp_path: Path) -> None:
+    """External mode -> Traefik labels, proxy network joined, host port dropped,
+    and NO scaffold README (the proxy already exists)."""
     config = build_profile(
         "standalone",
         "demo",
-        ProfileOptions(reverse_proxy=ReverseProxyConfig(path="infra/proxy")),
+        ProfileOptions(reverse_proxy=ReverseProxyConfig(mode="external", network="proxy")),
+    )
+    write_project(config, tmp_path / "demo")
+    compose = (tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8")
+    parsed = _parse(compose)
+    gateway = parsed["services"]["gateway"]
+    # Host port dropped; routed via labels instead.
+    assert "ports" not in gateway
+    labels = gateway["labels"]
+    assert "traefik.enable=true" in labels
+    assert "traefik.http.routers.demo.rule=Host(`demo.localtest.me`)" in labels
+    assert "traefik.http.services.demo.loadbalancer.server.port=8088" in labels
+    # Gateway joins the external proxy network (plus default for the DB).
+    assert "proxy" in gateway["networks"]
+    assert "default" in gateway["networks"]
+    # The proxy network is declared external; the stack does not create it.
+    assert parsed["networks"]["proxy"] == {"external": True}
+    # External mode scaffolds nothing.
+    assert not (tmp_path / "demo" / "reverse-proxy").exists()
+    # POST-SETUP carries the routed URL as a verification step.
+    post_setup = (tmp_path / "demo" / "POST-SETUP.md").read_text(encoding="utf-8")
+    assert "http://demo.localtest.me" in post_setup
+
+
+def test_external_proxy_custom_network_name(tmp_path: Path) -> None:
+    """A non-default network name flows into both the join and the declaration."""
+    config = build_profile(
+        "standalone",
+        "demo",
+        ProfileOptions(reverse_proxy=ReverseProxyConfig(mode="external", network="edge-net")),
+    )
+    parsed = _parse(_render(config))
+    assert "edge-net" in parsed["services"]["gateway"]["networks"]
+    assert parsed["networks"]["edge-net"] == {"external": True}
+
+
+def test_multi_gateway_proxy_routes_are_project_scoped(tmp_path: Path) -> None:
+    """Each gateway in a multi-gateway stack gets a project-scoped router host."""
+    config = build_profile(
+        "scaleout",
+        "demo",
+        ProfileOptions(reverse_proxy=ReverseProxyConfig(mode="external", network="proxy")),
+    )
+    parsed = _parse(_render(config))
+    fe_labels = parsed["services"]["frontend"]["labels"]
+    be_labels = parsed["services"]["backend"]["labels"]
+    assert "traefik.http.routers.demo-frontend.rule=Host(`demo-frontend.localtest.me`)" in fe_labels
+    assert "traefik.http.routers.demo-backend.rule=Host(`demo-backend.localtest.me`)" in be_labels
+
+
+def test_scaffold_proxy_writes_readme_and_joins_network(tmp_path: Path) -> None:
+    """Scaffold mode -> README at chosen path AND the gateway joins the network."""
+    config = build_profile(
+        "standalone",
+        "demo",
+        ProfileOptions(reverse_proxy=ReverseProxyConfig(mode="scaffold", network="proxy", path="infra/proxy")),
     )
     write_project(config, tmp_path / "demo")
     readme = tmp_path / "demo" / "infra" / "proxy" / "README.md"
     assert readme.is_file()
-    body = readme.read_text(encoding="utf-8")
-    assert "ia-eknorr/traefik-reverse-proxy" in body
-    # And a POST-SETUP stub points at the proxy directory.
+    assert "ia-eknorr/traefik-reverse-proxy" in readme.read_text(encoding="utf-8")
+    # The compose still wires the gateway to the scaffolded network.
+    parsed = _parse((tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8"))
+    assert "proxy" in parsed["services"]["gateway"]["networks"]
     post_setup = (tmp_path / "demo" / "POST-SETUP.md").read_text(encoding="utf-8")
     assert "infra/proxy" in post_setup
 
 
-def test_install_traefik_wizard_branch(tmp_path: Path) -> None:
-    """Wizard 'install Traefik' answer drives the same scaffold."""
+def test_wizard_proxy_joins_detected_network(monkeypatch) -> None:
+    """Proxy + detected 'proxy' network + confirm -> external mode on 'proxy'."""
+    monkeypatch.setattr("ignition_stack.wizard._detect_proxy_network", lambda: ["bridge", "proxy"])
     prompter = ScriptedPrompter(
         [
-            "quick",  # track gate
+            "quick",  # track
             "standalone",  # profile
             "postgres",  # database
             "none",  # edge_role
             False,  # redundancy
-            False,  # wire IIoT? -> no
-            False,  # customize modules? -> accept lean default
-            "install",  # reverse proxy
-            "reverse-proxy",  # path
-            "generate",  # summary action
+            False,  # IIoT
+            False,  # customize modules
+            "proxy",  # exposure -> reverse proxy
+            True,  # join detected 'proxy' network?
+            "generate",  # summary
         ]
     )
     outcome = walk("demo", prompter)
     assert outcome.confirmed
+    proxy = outcome.config.reverse_proxy
+    assert proxy is not None and proxy.mode == "external" and proxy.network == "proxy"
+
+
+def test_wizard_proxy_names_network_when_undetected(monkeypatch) -> None:
+    """No 'proxy' network detected -> user names the network (external mode)."""
+    monkeypatch.setattr("ignition_stack.wizard._detect_proxy_network", lambda: [])
+    prompter = ScriptedPrompter(
+        [
+            "quick",
+            "standalone",
+            "postgres",
+            "none",
+            False,
+            False,
+            False,
+            "proxy",  # exposure
+            "named",  # name an existing network
+            "edge-net",  # network name
+            "generate",
+        ]
+    )
+    outcome = walk("demo", prompter)
+    proxy = outcome.config.reverse_proxy
+    assert proxy is not None and proxy.mode == "external" and proxy.network == "edge-net"
+
+
+def test_wizard_proxy_scaffold_branch(tmp_path: Path, monkeypatch) -> None:
+    """No detection + scaffold choice -> scaffold mode + README written."""
+    monkeypatch.setattr("ignition_stack.wizard._detect_proxy_network", lambda: [])
+    prompter = ScriptedPrompter(
+        [
+            "quick",
+            "standalone",
+            "postgres",
+            "none",
+            False,
+            False,
+            False,
+            "proxy",  # exposure
+            "scaffold",  # scaffold the repo
+            "reverse-proxy",  # path
+            "generate",
+        ]
+    )
+    outcome = walk("demo", prompter)
+    proxy = outcome.config.reverse_proxy
+    assert proxy is not None and proxy.mode == "scaffold"
     write_project(outcome.config, tmp_path / "demo")
     assert (tmp_path / "demo" / "reverse-proxy" / "README.md").is_file()
+
+
+def test_wizard_host_ports_skip_detection(monkeypatch) -> None:
+    """Choosing host ports must never shell out to Docker."""
+
+    def _boom() -> list[str]:
+        raise AssertionError("detection ran for the host-ports path")
+
+    monkeypatch.setattr("ignition_stack.wizard._detect_proxy_network", _boom)
+    prompter = ScriptedPrompter(
+        [
+            "quick",
+            "standalone",
+            "postgres",
+            "none",
+            False,
+            False,
+            False,
+            "ports",  # exposure -> host ports
+            "generate",
+        ]
+    )
+    outcome = walk("demo", prompter)
+    assert outcome.config.reverse_proxy is None
 
 
 # --------------------------------------------------------------------------- #
@@ -601,7 +763,7 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",  # proxy
+            "ports",  # exposure: host ports
             True,  # advisory confirm
             "generate",  # summary action
         ]
@@ -624,7 +786,7 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",
+            "ports",
             False,  # decline advisory
             "generate",  # summary action
         ]
@@ -647,7 +809,7 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",
+            "ports",
             True,  # acknowledge red
             "generate",  # summary action
         ]
@@ -670,7 +832,7 @@ def test_wizard_red_tier_declined_falls_back() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",
+            "ports",
             False,  # decline red
             "generate",  # summary action
         ]
@@ -695,7 +857,7 @@ def test_wizard_scaleout_frontends_and_network_split() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",  # reverse proxy
+            "ports",  # exposure: host ports
             "generate",  # summary action
         ]
     )
@@ -719,7 +881,7 @@ def test_wizard_scaleout_network_split_declined() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",
+            "ports",
             "generate",
         ]
     )
@@ -738,7 +900,7 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
-            "external",
+            "ports",
             "cancel",  # cancel at summary
         ]
     )
@@ -778,7 +940,7 @@ def test_wizard_modules_decline_applies_lean_default() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default, no checkbox
-            "external",  # reverse proxy
+            "ports",  # exposure: host ports
             "generate",  # summary action
         ]
     )
@@ -813,7 +975,7 @@ def test_wizard_modules_jdbc_driver_follows_database() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # accept lean default
-            "external",
+            "ports",
             "generate",
         ]
     )
@@ -838,7 +1000,7 @@ def test_wizard_modules_customize_inverts_enabled_selection() -> None:
             False,  # wire IIoT? -> no
             True,  # customize modules? -> opens checkbox
             ["perspective", "vision"],  # ENABLE only these two
-            "external",  # reverse proxy
+            "ports",  # exposure: host ports
             "generate",  # summary action
         ]
     )
@@ -867,7 +1029,7 @@ def test_wizard_modules_no_database_enables_no_jdbc_driver() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # accept lean default
-            "external",
+            "ports",
             "generate",
         ]
     )
@@ -894,7 +1056,7 @@ def test_wizard_quick_track_matches_profile_build_exactly() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # accept lean module default
-            "external",
+            "ports",
             "generate",
         ]
     )
@@ -920,7 +1082,7 @@ def test_wizard_iiot_declined_leaves_no_broker() -> None:
             False,  # redundancy
             False,  # wire IIoT? -> no
             False,  # accept lean default
-            "external",
+            "ports",
             "generate",
         ]
     )
@@ -945,7 +1107,7 @@ def test_wizard_iiot_accepted_default_chariot_wired_by_role() -> None:
             True,  # wire IIoT? -> yes
             "chariot",  # broker (default)
             False,  # accept lean default
-            "external",
+            "ports",
             "generate",
         ]
     )
