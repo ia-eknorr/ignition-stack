@@ -50,11 +50,53 @@ Quick-track step order:
 Per-gateway env-var overrides (``memory_mb`` etc.) are deferred to a future
 phase; the gateway model already accepts them, so adding a wizard step on top
 is a non-breaking follow-up.
+
+Back-navigation (issue #59)
+---------------------------
+
+The Quick track is a **step machine, steps as data**: :data:`QUICK_STEPS` is an
+ordered list of :class:`Step` objects, each with a ``name``, a human ``label``
+(for the issue #60 breadcrumb), an ``applies(answers)`` predicate, and an
+``ask(prompter, answers, allow_back)`` callable that prompts and returns the
+step's answer (or the :data:`BACK` sentinel). Walking advances through the
+applicable steps recording answers; the summary is reached when the cursor runs
+off the end of the list. The list is introspectable - given an ``answers`` dict
+you can recover the names, the applicable subset, and the current position -
+which is what the follow-up breadcrumb will render.
+
+*Going back re-asks from that step forward.* Backing pops to the previous
+**applicable** step (skipped steps are jumped in both directions); each
+subsequent step is then re-asked, with the previously stored answer replayed as
+its default (select default = prior choice, confirm default = prior bool,
+integer default = prior value). This "replay forward, re-asking each" rule is
+deliberately the simpler of the two candidates: every later answer is
+re-confirmed rather than silently kept, so **invalidation is automatic** - an
+answer that is no longer a legal choice for the changed earlier answer (e.g. the
+edge-role after switching profile from hub-and-spoke to standalone) is dropped
+because its step re-asks and its stale value, not being in the new choice set,
+falls back to the step's canonical default. Newly-applicable steps (a spoke
+count that only exists for hub-and-spoke) are asked; newly-inapplicable ones are
+skipped and their stored answers ignored at build time.
+
+*Back affordance.* Back is offered on **select** prompts (a dim "Back" choice
+appended last, mapped to :data:`BACK`) and on **confirm** prompts (rendered as a
+Yes/No/Back select when ``allow_back`` is set). **Integer** and **text** prompts
+have no Back affordance in v1: the only integer steps are the spoke/frontend
+counts, which sit directly after the profile select, and text prompts appear
+only as reverse-proxy sub-questions. You can still step *into* those steps from a
+later select (their prior value replays as the default); you just cannot
+*initiate* a back from them. The track gate is step 0's predecessor: backing off
+the profile step returns to the "How do you want to build?" prompt. The summary
+select also carries a Back option, returning the user to the last question
+instead of forcing a cancel. The :data:`BACK` sentinel keeps the ``Prompter``
+protocol test-mockable: ``ScriptedPrompter`` drives back-navigation by yielding
+``BACK`` in its answer script, exactly where ``QuestionaryPrompter`` would map
+the Back choice.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -70,6 +112,34 @@ from ignition_stack.profiles import (
 from ignition_stack.services.resolver import resolve
 
 console = Console()
+
+
+class _Back:
+    """Singleton sentinel a prompter returns to mean "go back one step".
+
+    A distinct type (not ``None``/``False``, both legitimate answers) so the
+    step machine can tell a back request apart from a real selection. Both
+    prompters return this same instance: ``QuestionaryPrompter`` maps its Back
+    choice to it, ``ScriptedPrompter`` yields it straight from the answer script.
+    """
+
+    _instance: _Back | None = None
+
+    def __new__(cls) -> _Back:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:  # pragma: no cover - cosmetic
+        return "BACK"
+
+
+#: Sentinel returned by a prompter to request stepping back to the prior prompt.
+BACK = _Back()
+
+# Internal sentinel for "no stored answer yet, use the step's canonical default".
+# Distinct from ``None``, which is a real stored answer (e.g. database "none").
+_UNSET = object()
 
 # Track-gate values (the wizard's first prompt). Quick keeps the linear profile
 # flow; Custom hands off to the per-gateway composer.
@@ -128,10 +198,12 @@ class Prompter(Protocol):
         message: str,
         choices: Sequence[tuple[str, str]],
         default: str | None = None,
-    ) -> str:
+        allow_back: bool = False,
+    ) -> Any:
         """Single-choice prompt. ``choices`` is a list of ``(value, label)``
         pairs; the chosen ``value`` is returned. ``default`` is one of the
-        values (or None for first-choice default)."""
+        values (or None for first-choice default). When ``allow_back`` is set a
+        Back affordance is offered and selecting it returns :data:`BACK`."""
 
     def text(
         self,
@@ -140,11 +212,16 @@ class Prompter(Protocol):
     ) -> str:
         """Free-text prompt; returns the user's string (or ``default``)."""
 
-    def confirm(self, message: str, default: bool = False) -> bool:
-        """Yes/no prompt; returns the user's choice (or ``default``)."""
+    def confirm(self, message: str, default: bool = False, allow_back: bool = False) -> Any:
+        """Yes/no prompt; returns the user's choice (or ``default``). When
+        ``allow_back`` is set a Back affordance is offered and choosing it
+        returns :data:`BACK`."""
 
-    def integer(self, message: str, default: int, minimum: int = 0) -> int:
-        """Integer prompt; validates ``>= minimum`` and returns the parsed value."""
+    def integer(self, message: str, default: int, minimum: int = 0, allow_back: bool = False) -> Any:
+        """Integer prompt; validates ``>= minimum`` and returns the parsed value.
+
+        ``allow_back`` is accepted for signature parity with the other prompts;
+        integer steps have no Back affordance in v1 (see the module docstring)."""
 
     def checkbox(self, message: str, choices: Sequence[tuple[str, str, bool]]) -> list[str]:
         """Multi-select prompt. ``choices`` is ``(value, label, checked)`` triples
@@ -169,6 +246,24 @@ class WizardOutcome:
     summary_lines: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Step:
+    """One node of the Quick-track step machine.
+
+    ``applies`` decides whether the step is shown for the current ``answers``
+    (so profile-specific steps appear/vanish as earlier answers change).
+    ``ask`` runs the prompt(s) and returns the step's answer, or :data:`BACK`
+    to request stepping back. ``label`` is the human name the issue #60
+    breadcrumb will render. The objects are pure data: the closures take the
+    prompter and the answers dict, holding no state of their own.
+    """
+
+    name: str
+    label: str
+    applies: Callable[[Mapping[str, Any]], bool]
+    ask: Callable[[Prompter, dict[str, Any], bool], Any]
+
+
 def run_wizard(name: str, prompter: Prompter | None = None) -> ProjectConfig:
     """Run the wizard. Used by the CLI; raises if the user cancels at the summary.
 
@@ -190,40 +285,98 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     two-track gate: *quick* runs the linear profile flow, *custom* hands off to
     the per-gateway composer. Both return a :class:`WizardOutcome` whose
     ``config`` is what the CLI writes.
+
+    The loop re-shows the track gate when the Quick track backs out of its first
+    step, so the gate behaves like step 0 of the machine without entangling the
+    Custom branch.
     """
-    track = _ask_track(prompter)
-    if track == _TRACK_CUSTOM:
-        return _run_custom_track(name, prompter)
-    return _run_quick_track(name, prompter)
+    answers: dict[str, Any] = {}
+    while True:
+        track = _ask_track(prompter, default=answers.get("track", _TRACK_QUICK))
+        answers["track"] = track
+        if track == _TRACK_CUSTOM:
+            return _run_custom_track(name, prompter)
+        outcome = _run_quick_track(name, prompter, answers)
+        if outcome is BACK:
+            continue  # backed off the first profile step -> re-ask the gate
+        return outcome
 
 
-def _run_quick_track(name: str, prompter: Prompter) -> WizardOutcome:
-    """The linear profile flow (unchanged shape, plus the IIoT confirm and the
-    three-way summary that can hand off to the composer)."""
-    profile_slug = _ask_profile(prompter)
-    spokes = _ask_spokes(prompter) if profile_slug == "hub-and-spoke" else 3
-    frontends = _ask_frontends(prompter) if profile_slug == "scaleout" else 1
-    db_kind = _ask_database(prompter)
-    edge_role = _ask_edge_role(prompter, profile_slug)
-    network_split = _ask_network_split(prompter, profile_slug)
-    redundant_role = _ask_redundancy(prompter, profile_slug)
-    iiot, iiot_broker = _ask_iiot(prompter)
-    disable_builtins = _ask_disable_builtins(prompter, db_kind)
-    reverse_proxy = _ask_reverse_proxy(prompter)
+def _run_quick_track(name: str, prompter: Prompter, answers: dict[str, Any]) -> Any:
+    """Drive :data:`QUICK_STEPS`, then the summary; honour Back throughout.
 
-    options = ProfileOptions(
+    A single cursor walks the step list. ``history`` is the stack of applicable
+    step indices already answered, so a Back pops to the previous *applicable*
+    step (non-applicable steps are skipped in both directions). Running off the
+    end of the list is "show the summary"; Back at the summary pops to the last
+    question, Back before the first step returns :data:`BACK` so :func:`walk`
+    re-shows the track gate. Returns a :class:`WizardOutcome` on completion.
+    """
+    steps = QUICK_STEPS
+    i = 0
+    history: list[int] = []
+    while True:
+        if i >= len(steps):
+            result = _summary_phase(name, prompter, answers)
+            if result is not BACK:
+                return result
+            if not history:
+                return BACK
+            i = history.pop()
+            continue
+        step = steps[i]
+        if not step.applies(answers):
+            i += 1
+            continue
+        answer = step.ask(prompter, answers, True)
+        if answer is BACK:
+            if not history:
+                return BACK
+            i = history.pop()
+            continue
+        answers[step.name] = answer
+        history.append(i)
+        i += 1
+
+
+def _options_from_answers(answers: Mapping[str, Any]) -> ProfileOptions:
+    """Assemble :class:`ProfileOptions` from the recorded step answers.
+
+    Answers for steps that no longer apply to the chosen profile are ignored
+    here (the spoke count after switching away from hub-and-spoke, etc.), which
+    is where stale-but-stored answers get dropped at build time.
+    """
+    profile_slug = answers["profile"]
+    spokes = answers.get("spokes", 3) if profile_slug == "hub-and-spoke" else 3
+    frontends = answers.get("frontends", 1) if profile_slug == "scaleout" else 1
+    network_split = answers.get("network_split") if profile_slug in _MULTI_GATEWAY_PROFILES else None
+    redundant_role = answers.get("redundancy") if profile_slug in _REDUNDANCY_ROLE else None
+    iiot, iiot_broker = answers.get("iiot", (False, None))
+    return ProfileOptions(
         spokes=spokes,
         frontends=frontends,
         force=False,  # the wizard prompts on yellow/red instead of using --force.
-        edge_role=edge_role,
+        edge_role=answers.get("edge_role"),
         network_split=network_split,
-        reverse_proxy=reverse_proxy,
-        database_kind=db_kind,
+        reverse_proxy=answers.get("exposure"),
+        database_kind=answers.get("database"),
         redundant_role=redundant_role,
-        disable_builtins=disable_builtins,
+        disable_builtins=answers.get("modules", ()),
         iiot=iiot,
         iiot_broker=iiot_broker,
     )
+
+
+def _summary_phase(name: str, prompter: Prompter, answers: Mapping[str, Any]) -> Any:
+    """Build the config from ``answers`` and run the summary gate.
+
+    Returns a :class:`WizardOutcome` for generate/tweak/cancel, or :data:`BACK`
+    when the user chooses to return to the last question. The hub-and-spoke
+    advisory and the preview loop live here so they re-run each time the summary
+    is (re)entered after a back.
+    """
+    profile_slug = answers["profile"]
+    options = _options_from_answers(answers)
 
     # Hub-and-spoke advisory: ask the user inside the wizard rather than
     # demanding --force. Yellow asks for confirmation, red asks for the
@@ -251,6 +404,8 @@ def _run_quick_track(name: str, prompter: Prompter) -> WizardOutcome:
         if action != "preview":
             break
         console.print(dump_config(resolve(config), "yaml"), end="", markup=False)
+    if action is BACK:
+        return BACK
     if action == "tweak":
         # Hand the built, resolved config to the composer pre-filled. Its summary
         # loop takes over and produces the final config.
@@ -306,21 +461,24 @@ def _outcome_from_composer(result) -> WizardOutcome:
 # --------------------------------------------------------------------------- #
 
 
-def _ask_track(prompter: Prompter) -> str:
-    """The two-track gate (issue #43 phase 7): quick profile flow or custom composer."""
+def _ask_track(prompter: Prompter, default: str = _TRACK_QUICK) -> str:
+    """The two-track gate (issue #43 phase 7): quick profile flow or custom composer.
+
+    The wizard's very first prompt, so it carries no Back affordance.
+    """
     return prompter.select(
         "How do you want to build?",
         [
             (_TRACK_QUICK, "Quick — profile flow"),
             (_TRACK_CUSTOM, "Custom — compose services per gateway"),
         ],
-        default=_TRACK_QUICK,
+        default=default,
     )
 
 
-def _ask_profile(prompter: Prompter) -> str:
+def _ask_profile(prompter: Prompter, default: str = "standalone", allow_back: bool = False) -> Any:
     choices = [(p.slug, f"{p.slug:<14} - {p.summary}") for p in list_profiles()]
-    return prompter.select("Architecture profile?", choices, default="standalone")
+    return prompter.select("Architecture profile?", choices, default=default, allow_back=allow_back)
 
 
 def _ask_topology_preset(prompter: Prompter) -> tuple[str, ProfileOptions]:
@@ -352,59 +510,75 @@ def _ask_topology_preset(prompter: Prompter) -> tuple[str, ProfileOptions]:
     return profile_slug, options
 
 
-def _ask_iiot(prompter: Prompter) -> tuple[bool, str | None]:
+def _ask_iiot(prompter: Prompter, default: tuple[bool, str | None] = (False, None), allow_back: bool = False) -> Any:
     """Whether to overlay the MQTT/Sparkplug pipeline, and which broker.
 
     Default off. On "yes" a broker select defaults to chariot (Cirrus Link's own
     broker, the most official pairing with Transmission/Engine) and lists every
-    ``mqtt-broker`` catalog kind. Returns ``(False, None)`` when declined.
+    ``mqtt-broker`` catalog kind. Returns ``(False, None)`` when declined, or
+    :data:`BACK` if the user backs out of the leading confirm. ``default`` is the
+    previously stored ``(enabled, broker)`` pair, replayed on re-entry.
     """
-    if not prompter.confirm("Add IIoT (MQTT/Sparkplug)?", default=False):
+    want = prompter.confirm("Add IIoT (MQTT/Sparkplug)?", default=default[0], allow_back=allow_back)
+    if want is BACK:
+        return BACK
+    if not want:
         return False, None
     from ignition_stack.wizard_composer import mqtt_broker_choices
 
-    broker = prompter.select("MQTT broker?", mqtt_broker_choices(), default="chariot")
+    broker = prompter.select("MQTT broker?", mqtt_broker_choices(), default=default[1] or "chariot")
     return True, broker
 
 
-def _ask_spokes(prompter: Prompter) -> int:
-    return prompter.integer("Spoke gateway count?", default=3, minimum=0)
+def _ask_spokes(prompter: Prompter, default: int = 3, allow_back: bool = False) -> Any:
+    return prompter.integer("Spoke gateway count?", default=default, minimum=0, allow_back=allow_back)
 
 
-def _ask_frontends(prompter: Prompter) -> int:
-    return prompter.integer("Frontend gateway count?", default=1, minimum=1)
+def _ask_frontends(prompter: Prompter, default: int = 1, allow_back: bool = False) -> Any:
+    return prompter.integer("Frontend gateway count?", default=default, minimum=1, allow_back=allow_back)
 
 
-def _ask_network_split(prompter: Prompter, profile_slug: str) -> bool | None:
+def _ask_network_split(prompter: Prompter, profile_slug: str, default: bool | None = None, allow_back: bool = False) -> Any:
     """Whether to split frontend/backend onto separate networks.
 
     Only meaningful for multi-gateway profiles; single-gateway profiles
-    return ``None`` (no prompt) and let the profile keep its default.
+    return ``None`` (no prompt) and let the profile keep its default. ``default``
+    of ``None`` means "use the per-profile proposal"; a stored bool replays it.
     """
     if profile_slug not in _MULTI_GATEWAY_PROFILES:
         return None
-    default = _DEFAULT_NETWORK_SPLIT.get(profile_slug, False)
-    return prompter.confirm("Split frontend/backend onto separate Docker networks?", default=default)
+    if default is None:
+        default = _DEFAULT_NETWORK_SPLIT.get(profile_slug, False)
+    return prompter.confirm("Split frontend/backend onto separate Docker networks?", default=default, allow_back=allow_back)
 
 
-def _ask_redundancy(prompter: Prompter, profile_slug: str) -> str | None:
+def _ask_redundancy(prompter: Prompter, profile_slug: str, default: bool = False, allow_back: bool = False) -> Any:
     """Offer to make the profile's workhorse role redundant (master + backup).
 
     Only profiles with a single pairable role prompt; the rest return ``None``.
     Defaults off - redundancy doubles the gateway count and needs two licenses,
-    so it is opt-in.
+    so it is opt-in. Returns the role slug when accepted, ``None`` when declined,
+    or :data:`BACK` on a back request.
     """
     role = _REDUNDANCY_ROLE.get(profile_slug)
     if role is None:
         return None
     make = prompter.confirm(
         f"Enable redundancy for the {role} gateway?",
-        default=False,
+        default=default,
+        allow_back=allow_back,
     )
+    if make is BACK:
+        return BACK
     return role if make else None
 
 
-def _ask_disable_builtins(prompter: Prompter, db_kind: str | None) -> tuple[str, ...]:
+def _ask_disable_builtins(
+    prompter: Prompter,
+    db_kind: str | None,
+    prior_disable: tuple[str, ...] | None = None,
+    allow_back: bool = False,
+) -> Any:
     """Pick the built-in modules to run, opt-in from a curated default set.
 
     The catalog marks a lean "typical demo" set as default-enabled (Perspective,
@@ -426,28 +600,44 @@ def _ask_disable_builtins(prompter: Prompter, db_kind: str | None) -> tuple[str,
     if driver is not None:
         prechecked.add(driver)
 
-    if not prompter.confirm("Customize the enabled gateway modules?", default=False):
+    customize = prompter.confirm("Customize the enabled gateway modules?", default=False, allow_back=allow_back)
+    if customize is BACK:
+        return BACK
+    if not customize:
         # One-keystroke common path: accept the curated default set as-is. The
         # disabled set is everything outside it, including the non-matching JDBC
         # drivers - which is exactly the lean gateway the opt-in model promises.
         return tuple(sorted(all_slugs - prechecked))
 
+    # On re-entry after a back, replay the user's prior custom selection as the
+    # pre-checked set rather than resetting them to the curated baseline.
+    if prior_disable is not None:
+        prechecked = all_slugs - set(prior_disable)
     choices = [(m.slug, m.name, m.slug in prechecked) for m in sorted(catalog.modules, key=lambda m: m.name.lower())]
     chosen = set(prompter.checkbox("Modules to enable:", choices))
     return tuple(sorted(all_slugs - chosen))
 
 
-def _ask_database(prompter: Prompter) -> str | None:
-    raw = prompter.select("Database?", _DB_CHOICES, default="postgres")
+def _ask_database(prompter: Prompter, default: str = "postgres", allow_back: bool = False) -> Any:
+    raw = prompter.select("Database?", _DB_CHOICES, default=default, allow_back=allow_back)
+    if raw is BACK:
+        return BACK
     return None if raw == "none" else raw
 
 
-def _ask_edge_role(prompter: Prompter, profile_slug: str) -> str | None:
+def _ask_edge_role(prompter: Prompter, profile_slug: str, default: Any = _UNSET, allow_back: bool = False) -> Any:
     choices = _edition_choices_for(profile_slug)
     if not choices:
         return None
-    default = _DEFAULT_EDGE_ROLE.get(profile_slug, "none")
-    raw = prompter.select("Run the Edge edition on which role?", choices, default=default)
+    valid = {value for value, _ in choices}
+    # Replay the stored raw value only when it is still a legal choice for the
+    # current profile; otherwise fall back to the profile's canonical default.
+    # This is what drops an edge-role that the new profile no longer offers.
+    if default is _UNSET or default not in valid:
+        default = _DEFAULT_EDGE_ROLE.get(profile_slug, "none")
+    raw = prompter.select("Run the Edge edition on which role?", choices, default=default, allow_back=allow_back)
+    if raw is BACK:
+        return BACK
     return None if raw == "none" else raw
 
 
@@ -502,13 +692,16 @@ def _detect_proxy_network() -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def _ask_reverse_proxy(prompter: Prompter) -> ReverseProxyConfig | None:
+def _ask_reverse_proxy(prompter: Prompter, default: ReverseProxyConfig | None = None, allow_back: bool = False) -> Any:
     """Proxy vs. host ports, with detection of an existing proxy network.
 
     Host ports (the default, least-surprising answer) returns ``None`` - today's
     plain ``localhost:<port>`` mapping. Choosing the proxy detects a ``proxy``
     network (``ia-eknorr/traefik-reverse-proxy``'s default) and offers to join
-    it; otherwise the user names their proxy's network or scaffolds the repo.
+    it; otherwise the user names their proxy's network or scaffolds the repo. The
+    leading mode select carries the Back affordance; the proxy sub-questions do
+    not. ``default`` (a prior :class:`ReverseProxyConfig` or ``None``) only
+    replays the top-level host-ports-vs-proxy choice.
     """
     mode = prompter.select(
         "Expose gateways via",
@@ -516,8 +709,11 @@ def _ask_reverse_proxy(prompter: Prompter) -> ReverseProxyConfig | None:
             ("ports", "Host ports"),
             ("proxy", "Reverse proxy"),
         ],
-        default="ports",
+        default="ports" if default is None else "proxy",
+        allow_back=allow_back,
     )
+    if mode is BACK:
+        return BACK
     if mode == "ports":
         return None
 
@@ -620,12 +816,13 @@ def _enabled_modules_label(disable_builtins: tuple[str, ...]) -> str:
     return ", ".join(kept) if kept else "(none - all built-ins disabled)"
 
 
-def _ask_summary_action(prompter: Prompter, summary: list[str]) -> str:
-    """The three-way summary gate: generate / tweak / cancel.
+def _ask_summary_action(prompter: Prompter, summary: list[str]) -> Any:
+    """The summary gate: generate / preview / tweak / cancel, plus Back.
 
     *generate* writes the project as-is (today's confirmed path); *tweak* hands
     the built config to the Custom composer pre-filled; *cancel* aborts (the
-    CLI maps an unconfirmed outcome to exit 130).
+    CLI maps an unconfirmed outcome to exit 130). The Back affordance returns
+    :data:`BACK`, sending the user to the last question instead of cancelling.
     """
     block = "\n".join(summary)
     return prompter.select(
@@ -637,7 +834,93 @@ def _ask_summary_action(prompter: Prompter, summary: list[str]) -> str:
             ("cancel", "Cancel"),
         ],
         default="generate",
+        allow_back=True,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Quick-track step machine (issue #59): steps as data, with back-navigation
+# --------------------------------------------------------------------------- #
+
+
+def _step_profile(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    return _ask_profile(prompter, default=answers.get("profile", "standalone"), allow_back=allow_back)
+
+
+def _step_spokes(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    return _ask_spokes(prompter, default=answers.get("spokes", 3), allow_back=allow_back)
+
+
+def _step_frontends(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    return _ask_frontends(prompter, default=answers.get("frontends", 1), allow_back=allow_back)
+
+
+def _step_database(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    prior = answers.get("database", _UNSET)
+    default = "postgres" if prior is _UNSET else ("none" if prior is None else prior)
+    return _ask_database(prompter, default=default, allow_back=allow_back)
+
+
+def _step_edge_role(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    prior = answers.get("edge_role", _UNSET)
+    raw_default = _UNSET if prior is _UNSET else ("none" if prior is None else prior)
+    return _ask_edge_role(prompter, answers["profile"], default=raw_default, allow_back=allow_back)
+
+
+def _step_network_split(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    return _ask_network_split(prompter, answers["profile"], default=answers.get("network_split"), allow_back=allow_back)
+
+
+def _step_redundancy(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    prior = answers.get("redundancy", _UNSET)
+    default = False if prior is _UNSET else (prior is not None)
+    return _ask_redundancy(prompter, answers["profile"], default=default, allow_back=allow_back)
+
+
+def _step_iiot(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    return _ask_iiot(prompter, default=answers.get("iiot", (False, None)), allow_back=allow_back)
+
+
+def _step_modules(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    prior = answers.get("modules", _UNSET)
+    return _ask_disable_builtins(
+        prompter,
+        answers.get("database"),
+        prior_disable=None if prior is _UNSET else prior,
+        allow_back=allow_back,
+    )
+
+
+def _step_exposure(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    return _ask_reverse_proxy(prompter, default=answers.get("exposure"), allow_back=allow_back)
+
+
+#: The Quick track as an ordered, introspectable list of steps. ``applies``
+#: reads the chosen profile so count/split/redundancy steps appear only where
+#: they mean something (and are skipped in both walk directions otherwise). The
+#: summary is reached when the cursor runs past the end of this list. The
+#: follow-up breadcrumb (#60) renders ``label`` for the applicable subset.
+QUICK_STEPS: list[Step] = [
+    Step("profile", "Profile", lambda a: True, _step_profile),
+    Step("spokes", "Spoke count", lambda a: a.get("profile") == "hub-and-spoke", _step_spokes),
+    Step("frontends", "Frontend count", lambda a: a.get("profile") == "scaleout", _step_frontends),
+    Step("database", "Database", lambda a: True, _step_database),
+    Step("edge_role", "Edge edition", lambda a: True, _step_edge_role),
+    Step("network_split", "Network split", lambda a: a.get("profile") in _MULTI_GATEWAY_PROFILES, _step_network_split),
+    Step("redundancy", "Redundancy", lambda a: a.get("profile") in _REDUNDANCY_ROLE, _step_redundancy),
+    Step("iiot", "IIoT", lambda a: True, _step_iiot),
+    Step("modules", "Modules", lambda a: True, _step_modules),
+    Step("exposure", "Exposure", lambda a: True, _step_exposure),
+]
+
+
+def applicable_steps(answers: Mapping[str, Any]) -> list[Step]:
+    """The Quick-track steps that apply for the given ``answers``.
+
+    Introspection seam for the issue #60 breadcrumb: the position of the current
+    step in this list, and its length, give "step N of M".
+    """
+    return [step for step in QUICK_STEPS if step.applies(answers)]
 
 
 # --------------------------------------------------------------------------- #
@@ -657,13 +940,18 @@ class QuestionaryPrompter:
         message: str,
         choices: Sequence[tuple[str, str]],
         default: str | None = None,
-    ) -> str:
+        allow_back: bool = False,
+    ) -> Any:
         import questionary
 
         # Questionary's `select` takes a list of `Choice` objects with a
         # title (what the user sees) and a value (what we receive). Build
         # the map so we can resolve the answer back to its slug.
         q_choices = [questionary.Choice(title=label, value=value) for value, label in choices]
+        if allow_back:
+            # Append a dim Back row last; its value is the BACK sentinel, so the
+            # answer round-trips straight into the step machine's back handler.
+            q_choices.append(questionary.Choice(title="← Back", value=BACK))
         # Questionary matches `default` against choice values, not titles, so
         # pass the slug straight through (or None when it isn't a real choice).
         default_value = default if any(value == default for value, _ in choices) else None
@@ -674,6 +962,8 @@ class QuestionaryPrompter:
         # use_search_filter is intentionally left False: questionary raises
         # ValueError when use_jk_keys and use_search_filter are both True.
         answer = questionary.select(message, choices=q_choices, default=default_value, instruction=" ").unsafe_ask()
+        if answer is BACK:
+            return BACK
         return str(answer)
 
     def text(self, message: str, default: str = "") -> str:
@@ -682,14 +972,31 @@ class QuestionaryPrompter:
         answer = questionary.text(message, default=default).unsafe_ask()
         return str(answer)
 
-    def confirm(self, message: str, default: bool = False) -> bool:
+    def confirm(self, message: str, default: bool = False, allow_back: bool = False) -> Any:
         import questionary
 
+        if allow_back:
+            # Render a back-able confirm as a 3-way select so the Back affordance
+            # is uniform with the other steps; the y/n choices preserve the bool
+            # contract. Plain confirms (allow_back=False) keep the native y/n UX.
+            answer = questionary.select(
+                message,
+                choices=[
+                    questionary.Choice(title="Yes", value=True),
+                    questionary.Choice(title="No", value=False),
+                    questionary.Choice(title="← Back", value=BACK),
+                ],
+                default=bool(default),
+                instruction=" ",
+            ).unsafe_ask()
+            return answer if answer is BACK else bool(answer)
         return bool(questionary.confirm(message, default=default).unsafe_ask())
 
-    def integer(self, message: str, default: int, minimum: int = 0) -> int:
+    def integer(self, message: str, default: int, minimum: int = 0, allow_back: bool = False) -> Any:
         import questionary
 
+        # allow_back is accepted for protocol parity but integer prompts have no
+        # Back affordance in v1 (see the module docstring); the flag is a no-op.
         def _validate(text: str) -> bool | str:
             try:
                 value = int(text)
