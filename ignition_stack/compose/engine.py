@@ -251,6 +251,7 @@ def _gateway_context(gw: GatewayConfig, config: ProjectConfig, catalog: Catalog 
         "port_ref": port_ref,
         "networks": networks,
         "module_identifiers": module_identifiers,
+        "accept_module_identifiers": _accept_module_identifiers(gw, config, catalog),
         "cached_modules": cached_modules,
     }
 
@@ -314,6 +315,7 @@ def _ignition_context(ctx: dict[str, object], config: ProjectConfig, multi: bool
         "memory_mb": gw.memory_mb,
         "edition_override": edition_override,
         "module_identifiers": ctx["module_identifiers"],
+        "accept_module_identifiers": ctx["accept_module_identifiers"],
         # disable_active drives template emission (not the value's truthiness) so
         # that disabling EVERY built-in emits an empty whitelist - which quarantines
         # all, matching intent - instead of omitting the var and re-enabling all.
@@ -325,6 +327,31 @@ def _ignition_context(ctx: dict[str, object], config: ProjectConfig, multi: bool
         "gan_incoming": gan_incoming,
         "gan_outgoing": gan_outgoing,
     }
+
+
+def _accept_module_identifiers(gw: GatewayConfig, config: ProjectConfig, catalog: Catalog | None) -> str:
+    """The ACCEPT_MODULE_LICENSES / ACCEPT_MODULE_CERTS value for this gateway.
+
+    The bootstrap copies the whole shared ``modules/cache/`` into every gateway
+    that mounts it, so each gateway ends up *installing* every module in the
+    stack - not just the ones attached to it. The accept lists must cover what
+    is installed, or 8.3 commissioning stalls at ``NEEDS_COMMISSIONING``
+    waiting for a UI click on the un-listed module's license (verified live in
+    the Phase-4 IIoT spike: a hub accepting only mqtt-engine was prompted for
+    the mqtt-transmission license its bootstrap had copied in). Hence: the
+    first-seen-ordered union of every gateway's module identifiers, emitted
+    only for gateways that mount the cache at all. Stacks where every gateway
+    lists the same modules (all pre-IIoT profiles) get the identical string as
+    before, keeping those goldens byte-stable.
+    """
+    if not gw.modules:
+        return ""
+    union: list[str] = []
+    for other in config.gateways:
+        for ident in _module_identifiers_for(other, catalog).split(","):
+            if ident and ident not in union:
+                union.append(ident)
+    return ",".join(union)
 
 
 def _module_identifiers_for(gw: GatewayConfig, catalog: Catalog | None) -> str:

@@ -1,0 +1,24 @@
+{
+  "cleanSession": true,
+  "enableLegacyStateMessages": false,
+  "enablePrimaryHostSubscriptions": false,
+  "hostnameVerification": true,
+  "includeSparkplugDataTypes": true,
+  "keepAlive": 30,
+  "legacyStateHostnameVerification": true,
+{%- if broker_auth %}
+  "password": {
+    "data": {
+      "ciphertext": "ocBdVWl8dJ11OA",
+      "encrypted_key": "tFIidcJIAFOTVTc8rLuIkcbgwt5uO-NIKrdSCmGtTZv_Y29Y-sGhzQ",
+      "iv": "v-sHNKJlKfWm3ESB",
+      "protected": "eyJhbGciOiJBMjU2S1ciLCJlbmMiOiJBMjU2R0NNIiwiaWF0IjoxNzgxMTA3NjIwLCJ6aXAiOiJERUYifQ",
+      "tag": "EEx4cBIQ2kTe4R8ZeZus9g"
+    },
+    "type": "Embedded"
+  },
+  "username": "{{ broker_user }}",
+{%- endif %}
+  "serverSet": "Default Set",
+  "url": "tcp://{{ instance }}:{{ wires.port }}"
+}

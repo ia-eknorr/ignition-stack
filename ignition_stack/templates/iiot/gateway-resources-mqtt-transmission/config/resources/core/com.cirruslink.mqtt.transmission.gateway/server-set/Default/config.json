@@ -1,0 +1,5 @@
+{
+  "autoReconnectRpcClient": false,
+  "randomizeServerConnections": false,
+  "rpcClientEnabled": false
+}

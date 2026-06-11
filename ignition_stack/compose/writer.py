@@ -38,6 +38,30 @@ from ignition_stack.services.resolver import resolve
 _STATIC_PACKAGE = "ignition_stack.templates"
 _STATIC_PROFILE = "standalone-postgres"
 
+# The Cirrus Link Transmission/Engine seed trees the Phase-4 spike proved
+# file-seedable, kept in one shared place so every broker that wires the same
+# modules (chariot/emqx/hivemq/rabbitmq all name mqtt-transmission/mqtt-engine
+# in their wires.mqtt) reuses them. A broker resolves its role-scoped seeds
+# from its own seed/gateway-resources-<role>/ first, then falls back here.
+_IIOT_PACKAGE = "ignition_stack.templates"
+_IIOT_SUBDIR = "iiot"
+
+# Brokers whose seeded MQTT connection was verified live (2026-06-11). Only
+# chariot's auth (admin / changeme, shipped as a portable JWE) was proven; the
+# anonymous brokers ship the same seeds with the credential fields stripped.
+_IIOT_VERIFIED_BROKERS = frozenset({"chariot"})
+
+# Per-broker MQTT auth posture for the seeded Cirrus connection. ``None`` means
+# the broker accepts anonymous MQTT, so the seed omits username/password; a
+# (user, jwe-plaintext) tuple means the seed carries the captured JWE blob that
+# decrypts to that plaintext. chariot's image auto-seeds an MQTT user
+# admin/changeme with full ACL (independent of CHARIOT_ADMIN_PASSWORD, which
+# only sets the web admin); emqx and HiveMQ CE allow anonymous by default;
+# RabbitMQ needs a user but its MQTT plugin password cannot be JWE-encrypted at
+# generation time, so it falls back to anonymous-shaped seeds + a POST-SETUP
+# note (config-shaped, not live-verified).
+_BROKER_MQTT_USER: dict[str, str] = {"chariot": "admin"}
+
 
 def write_project(
     config: ProjectConfig,
@@ -113,39 +137,106 @@ def _copy_service_seeds(config: ProjectConfig, target_dir: Path) -> list[Path]:
 
 
 def _overlay_gateway_resources(config: ProjectConfig, target_dir: Path) -> list[Path]:
-    """Overlay each seeding service's ``seed/gateway-resources/`` onto gateways.
+    """Overlay each seeding service's gateway-resources onto attached gateways.
 
-    Per the Phase-1 matrix, file-seedable connections (db-connection, the
-    internal-secret-provider that holds its password, ...) are dropped into the
-    ``config/resources/`` tree of the gateways that **attach** to the service,
-    which the bootstrap copies into the gateway data volume on first boot.
-    Attachment-driven: a gateway only receives a service's resources if it has a
-    :class:`ServiceAttachment` to that instance. Lowered configs attach every
-    gateway to the shared services, so the same resource set still lands on
-    every gateway - byte-identical to the pre-registry fan-to-all.
+    Three resource sources fan onto a gateway's ``config/resources/`` tree (the
+    bootstrap copies them into the data volume on first boot), all
+    attachment-driven so a gateway only receives a service's resources if it has
+    a :class:`ServiceAttachment` to that instance:
+
+    1. ``seed/gateway-resources/`` - the attachment-scoped tree (db-connection,
+       the internal-secret-provider that holds its password, the Keycloak OIDC
+       config). Lands on every gateway attached to the instance, regardless of
+       attachment role. Lowered configs attach every gateway to the shared
+       services, so this stays byte-identical to the pre-registry fan-to-all.
+    2. ``seed/gateway-resources-<role>/`` - a role-scoped tree that lands ONLY on
+       gateways whose attachment to that instance carries the matching ``role``
+       string. Generic (the role lives in the dir suffix), not mqtt-special-cased.
+    3. The shared Cirrus Link IIoT trees - the Phase-4 spike's proven Transmission
+       and Engine seeds, resolved for any instance whose manifest declares a
+       ``wires.mqtt`` block, placed by the same role mechanism (the
+       ``mqtt-transmission`` tree onto transmission-attached gateways, ``mqtt-engine``
+       onto engine-attached). A broker that ships its own role-scoped tree (source
+       2) overrides this fallback.
+
+    Every file passes through :func:`_render_seed`, so a ``.j2`` source renders
+    (StrictUndefined) with ``{project, gateway, instance, wires}`` and a non-``.j2``
+    source is copied byte-for-byte.
     """
+    catalog = load_all_services()
     written: list[Path] = []
     for src_dir, inst in _seed_sources(config):
-        resources_tree = src_dir / "seed" / "gateway-resources"
-        if not resources_tree.is_dir():
-            continue
-        for rel, content, executable in _walk_template(resources_tree):
-            for gw_dir in _attached_gateway_dirs(config, inst.id):
-                written.append(_write_static(target_dir, f"services/{gw_dir}/{rel}", content, executable))
+        manifest = catalog.get(inst.service)
+        wires = manifest.wires.mqtt if (manifest is not None and manifest.wires is not None) else None
+
+        # 1. Attachment-scoped tree (all roles).
+        attach_tree = src_dir / "seed" / "gateway-resources"
+        if attach_tree.is_dir():
+            for gw in _attached_gateways(config, inst.id):
+                ctx = _seed_context(config, gw, inst, wires)
+                for rel, content, executable in _walk_seed(attach_tree, ctx):
+                    written.append(_write_static(target_dir, f"services/{_gw_dir(config, gw)}/{rel}", content, executable))
+
+        # 2 + 3. Role-scoped trees: the service's own seed/gateway-resources-<role>/,
+        # or the shared IIoT fallback for a broker wired role.
+        for gw in config.gateways:
+            for role in {a.role for a in gw.services if a.instance == inst.id}:
+                role_tree = _role_seed_tree(src_dir, inst.service, role, wires)
+                if role_tree is None:
+                    continue
+                ctx = _seed_context(config, gw, inst, wires)
+                for rel, content, executable in _walk_seed(role_tree, ctx):
+                    written.append(_write_static(target_dir, f"services/{_gw_dir(config, gw)}/{rel}", content, executable))
     return written
 
 
-def _attached_gateway_dirs(config: ProjectConfig, instance_id: str) -> list[str]:
-    """Template-source dir names of gateways attached to ``instance_id``.
+def _role_seed_tree(src_dir: Traversable, service: str, role: str, wires: object) -> Traversable | None:
+    """Resolve the role-scoped seed tree for ``role`` on ``service``, or None.
 
-    Single-gateway stacks keep the Phase-2 ``services/ignition/`` layout (the
-    one gateway's dir is always ``ignition`` regardless of its name); multi
-    gateway stacks use each attached gateway's own name.
+    A service's own ``seed/gateway-resources-<role>/`` wins; otherwise, when the
+    service is an mqtt-broker with a ``wires.mqtt`` block and the role is one the
+    shared IIoT trees cover, fall back to ``templates/iiot/gateway-resources-<role>/``.
     """
-    attached = [gw for gw in config.gateways if any(a.instance == instance_id for a in gw.services)]
-    if not config.is_multi_gateway:
-        return ["ignition"] if attached else []
-    return [gw.name for gw in attached]
+    own = src_dir / "seed" / f"gateway-resources-{role}"
+    if own.is_dir():
+        return own
+    if wires is None:
+        return None
+    shared = _iiot_root() / f"gateway-resources-{role}"
+    return shared if shared.is_dir() else None
+
+
+def _seed_context(config: ProjectConfig, gw: object, inst: ServiceInstance, wires: object) -> dict[str, object]:
+    """The Jinja context a ``.j2`` seed file renders against.
+
+    ``broker_auth`` / ``broker_user`` let the shared IIoT server-connection seed
+    carry the captured JWE credential blob for a broker that needs MQTT auth
+    (chariot) and omit it for an anonymous broker (emqx/hivemq).
+    """
+    user = _BROKER_MQTT_USER.get(inst.service)
+    return {
+        "project": config.name,
+        "gateway": gw.name,  # type: ignore[attr-defined]
+        "instance": inst.id,
+        "wires": wires,
+        "broker_auth": user is not None,
+        "broker_user": user or "",
+    }
+
+
+def _attached_gateways(config: ProjectConfig, instance_id: str) -> list[object]:
+    """Gateways with any attachment to ``instance_id`` (role-agnostic)."""
+    return [gw for gw in config.gateways if any(a.instance == instance_id for a in gw.services)]
+
+
+def _gw_dir(config: ProjectConfig, gw: object) -> str:
+    """Template-source dir name for ``gw``.
+
+    Single-gateway stacks keep the Phase-2 ``services/ignition/`` layout (the one
+    gateway's dir is always ``ignition`` regardless of its name); multi-gateway
+    stacks use each gateway's own name.
+    """
+    return gw.name if config.is_multi_gateway else "ignition"  # type: ignore[attr-defined]
 
 
 def _write_redundancy_seeds(config: ProjectConfig, target_dir: Path) -> list[Path]:
@@ -486,4 +577,50 @@ def _walk_template(root: Traversable, prefix: str = "") -> list[tuple[str, bytes
         # Shell scripts (the bootstrap, Postgres initdb hooks, ...) must be
         # executable so the container can run them directly.
         out.append((rel, entry.read_bytes(), rel.endswith(".sh")))
+    return out
+
+
+def _iiot_root() -> Traversable:
+    return resources.files(_IIOT_PACKAGE) / _IIOT_SUBDIR
+
+
+def _seed_jinja_env() -> Environment:
+    """A from-string Jinja env for seed-file rendering, matching the others.
+
+    StrictUndefined so a missing context key fails loud at generation time
+    instead of silently writing an empty value into a gateway resource.
+    """
+    return Environment(undefined=StrictUndefined, keep_trailing_newline=True, autoescape=False)
+
+
+def _render_seed(text: str, ctx: dict[str, object]) -> str:
+    """Render one seed-file string through the seed Jinja env."""
+    return _seed_jinja_env().from_string(text).render(**ctx)
+
+
+def _walk_seed(root: Traversable, ctx: dict[str, object], prefix: str = "") -> list[tuple[str, bytes, bool]]:
+    """Like :func:`_walk_template`, but renders ``.j2`` files and path segments.
+
+    A file whose name ends ``.j2`` renders through Jinja (``ctx``) and the ``.j2``
+    suffix is stripped from the written path; any other file is copied
+    byte-for-byte. Directory and file name segments wrapped in ``{{ }}`` (e.g. a
+    ``transmitter/{{gateway}}/`` dir) are themselves rendered, so the on-disk
+    path carries the per-gateway identity. ``.j2`` files are never marked
+    executable (seeds are JSON, not scripts); a ``.sh`` source still is.
+    """
+    out: list[tuple[str, bytes, bool]] = []
+    for entry in sorted(root.iterdir(), key=lambda e: e.name):
+        name = entry.name
+        rendered_name = _render_seed(name, ctx) if "{{" in name else name
+        if entry.is_dir():
+            out.extend(_walk_seed(entry, ctx, prefix=f"{prefix}{rendered_name}/"))
+            continue
+        if name == "__init__.py" or name.endswith(".pyc"):
+            continue
+        if name.endswith(".j2"):
+            out_name = rendered_name[: -len(".j2")]
+            content = _render_seed(entry.read_text(encoding="utf-8"), ctx).encode("utf-8")
+            out.append((f"{prefix}{out_name}", content, False))
+        else:
+            out.append((f"{prefix}{rendered_name}", entry.read_bytes(), name.endswith(".sh")))
     return out

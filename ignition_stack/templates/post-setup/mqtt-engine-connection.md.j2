@@ -1,15 +1,63 @@
+{% if mqtt and (mqtt.transmission_gateways or mqtt.engine_gateways) and mqtt.seeded %}
+## Verify the MQTT Sparkplug pipeline ({{ mqtt.broker }})
+
+This stack seeds the Cirrus Link Transmission/Engine connections fully: each
+edge gateway's Transmission and the central gateway's Engine boot already
+pointed at `{{ mqtt.broker_url }}` with their Sparkplug identity set, so the
+pipeline forms with no UI clicks. This step is a verification, not a manual
+procedure - confirm the flow came up, and reach for the manual steps below only
+if it did not.
+
+The Cirrus modules install from the project's `modules/cache/`, which starts
+empty. Populate it once before bringing the stack up:
+
+```sh
+ignition-stack modules download {{ mqtt.modules }}
+docker compose up -d
+```
+
+What to check:
+{% if mqtt.engine_gateways %}
+{%- for gw in mqtt.engine_gateways %}
+- **Engine on {{ gw.name }}** ({{ gw.url }}): Config -> MQTT Engine -> Servers shows
+  the seeded server `{{ mqtt.broker_url }}` as **Connected**, and the Engine tag
+  tree lists each edge node below.
+{%- endfor %}
+{% endif %}
+{%- if mqtt.transmission_gateways %}
+{%- for gw in mqtt.transmission_gateways %}
+- **Transmission on {{ gw.name }}** ({{ gw.url }}): Config -> MQTT Transmission ->
+  Servers shows `{{ mqtt.broker_url }}` **Connected**, publishing as
+  **Group ID `{{ gw.group_id }}` / Edge Node ID `{{ gw.edge_node_id }}`**.
+{%- endfor %}
+{% endif %}
+- **Broker ({{ mqtt.broker }})**: its web UI lists the connected MQTT clients and
+  the live Sparkplug topics (`spBv1.0/{{ project_name }}/...`).
+
+> **Two trial caveats (demo posture).** The Cirrus Transmission/Engine modules
+> run on Ignition's ~2-hour platform trial. When it lapses, the reliable
+> reset is the **Reset Trial** button in each gateway UI's trial banner (free
+> and unlimited); a container restart is not dependable - the trial state
+> lives in the data volume and restart behavior proved inconsistent in testing. The {{ mqtt.broker }} broker itself needs an active license to open its
+> MQTT listener; this stack's `{{ mqtt.broker }}-trial` init container starts the
+> trial automatically over the broker's REST API on every `up`. For a real
+> deployment, set a `LICENSE_TYPE` / license env on the broker and drop the
+> trial init.
+{% elif mqtt and (mqtt.transmission_gateways or mqtt.engine_gateways) %}
 ## Link the gateway to the MQTT broker ({{ service }})
 
 {{ reason }}
-{% if mqtt and (mqtt.transmission_gateways or mqtt.engine_gateways) %}
-This stack wires a Sparkplug pipeline through the **{{ mqtt.broker }}** broker.
-Until config seeding lands, every MQTT connection is set by hand - the steps
-below are pre-filled with this stack's identities so you only have to copy them
-in. The broker endpoint is `{{ mqtt.broker_url }}` (reachable from each gateway
-container by the broker's compose service name).
 
-> The Cirrus Link Transmission/Engine modules run a ~2-hour trial that resets on
-> every gateway restart, so this loop demos with no license.
+This stack wires a Sparkplug pipeline through the **{{ mqtt.broker }}** broker.
+Only chariot's seeded connection was verified live, so for this broker the MQTT
+connections are set by hand - the steps below are pre-filled with this stack's
+identities so you only have to copy them in. The broker endpoint is
+`{{ mqtt.broker_url }}` (reachable from each gateway container by the broker's
+compose service name).
+
+> The Cirrus Link Transmission/Engine modules run on Ignition's ~2-hour trial,
+> so this loop demos with no license. When it lapses, click **Reset Trial** in
+> the gateway UI's trial banner (a container restart is not a dependable reset).
 
 The Cirrus modules install from the project's `modules/cache/`, which starts
 empty. Populate it once before the modules will load, then bring the stack up:
@@ -45,6 +93,9 @@ beyond the server entry:
 - `{{ key }}` = `{{ value }}`
 {%- endfor %}
 {% else %}
+## Link the gateway to the MQTT broker ({{ service }})
+
+{{ reason }}
 - **Open the gateway UI:** {{ gateway_url }}
 - **Navigate to:** Config -> MQTT Engine -> Servers -> Settings (use MQTT Transmission
   on an edge gateway instead), then add an MQTT server pointing at `{{ service }}`.

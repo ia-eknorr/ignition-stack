@@ -106,39 +106,51 @@ def _iiot_post_setup(profile: str, name: str, **opts: object) -> str:
 
 
 def test_iiot_hub_and_spoke_names_engine_hub_and_transmission_spokes() -> None:
-    """Transmission steps name each spoke with prefilled Sparkplug identity;
-    the Engine step names the hub. Broker endpoint comes from wires.mqtt."""
+    """The chariot pipeline is now seeded, so the step is a verification: it names
+    each spoke's seeded Sparkplug identity and the hub's Engine, plus the two
+    trial caveats. Broker endpoint comes from wires.mqtt."""
     body = _iiot_post_setup("hub-and-spoke", "plant", spokes=2)
 
+    # Framed as a verification (chariot seeds the connections), not a manual paste.
+    assert "Verify the MQTT Sparkplug pipeline (chariot)" in body
+    assert "verification, not a manual" in body
+
     # Engine on the hub.
-    assert "**MQTT Engine**" in body
-    assert "On **hub**" in body
-    assert "spBv1.0" in body  # Engine subscribes to all groups by default.
+    assert "Engine on hub" in body
 
     # Transmission on each spoke, with Group ID = project, Edge Node ID = gw name.
-    assert "**MQTT Transmission**" in body
     for spoke in ("spoke-1", "spoke-2"):
-        assert f"On **{spoke}**" in body
-        assert f"Edge Node ID = `{spoke}`" in body
-    assert "Group ID = `plant`" in body
+        assert f"Transmission on {spoke}" in body
+        assert f"Edge Node ID `{spoke}`" in body
+    assert "Group ID `plant`" in body
 
     # Broker endpoint from wires.mqtt (tcp://<broker-id>:<port>).
     assert "tcp://chariot:1883" in body
-    # The trial note is present so users know no license is required.
-    assert "trial" in body.lower()
+    # Both trial caveats: Ignition's 2h platform trial + the broker license gate.
+    assert "2-hour platform trial" in body
+    assert "chariot-trial" in body
 
 
 def test_iiot_scaleout_engine_on_backend_transmission_on_frontends() -> None:
     body = _iiot_post_setup("scaleout", "edge", frontends=2)
-    assert "On **backend**" in body
+    assert "Engine on backend" in body
     for front in ("frontend-1", "frontend-2"):
-        assert f"On **{front}**" in body
-        assert f"Edge Node ID = `{front}`" in body
+        assert f"Transmission on {front}" in body
+        assert f"Edge Node ID `{front}`" in body
 
 
 def test_iiot_standalone_single_gateway_runs_both_roles() -> None:
     body = _iiot_post_setup("standalone", "solo")
-    assert "**MQTT Engine**" in body
-    assert "**MQTT Transmission**" in body
-    assert "On **gateway**" in body
-    assert "Edge Node ID = `gateway`" in body
+    assert "Engine on gateway" in body
+    assert "Transmission on gateway" in body
+    assert "Edge Node ID `gateway`" in body
+
+
+def test_iiot_unverified_broker_keeps_manual_procedure() -> None:
+    """A broker whose seeded connection was not live-verified (emqx) stays a
+    manual paste, not a verification - only chariot was proven."""
+    body = _iiot_post_setup("hub-and-spoke", "plant", spokes=2, iiot_broker="emqx")
+    assert "Link the gateway to the MQTT broker (emqx)" in body
+    assert "set by hand" in body
+    assert "Group ID = `plant`" in body
+    assert "tcp://emqx:1883" in body

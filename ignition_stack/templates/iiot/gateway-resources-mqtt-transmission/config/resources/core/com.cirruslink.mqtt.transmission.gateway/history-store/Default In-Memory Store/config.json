@@ -1,0 +1,17 @@
+{
+  "dbMaxMetricSize": 8388608,
+  "flushPeriod": 200,
+  "flushQuantity": 40000,
+  "h2dbDirectory": "/usr/local/bin/ignition/data",
+  "h2dbPort": 9093,
+  "historyMaxAge": 44640,
+  "historyMaxSize": 500,
+  "partitionPeriod": "HOUR",
+  "queryTimeout": 60,
+  "rollingHistoryBufferEnabled": false,
+  "rollingHistoryMaxAge": 60,
+  "rollingHistoryPruneInterval": 60,
+  "rollingHistoryPruneQuantity": 1000,
+  "transmissionHistoryStoreType": "IN_MEMORY",
+  "trimmerTaskPeriodMultiplier": 4
+}

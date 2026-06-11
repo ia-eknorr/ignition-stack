@@ -223,13 +223,24 @@ def _mqtt_wiring(config: ProjectConfig) -> dict[str, object] | None:
         module_slugs.append(mqtt.engine_module)
     if transmission:
         module_slugs.append(mqtt.transmission_module)
+    # The writer seeds the Cirrus Transmission/Engine connections for any broker
+    # whose manifest carries wires.mqtt (the shared IIoT seed trees). Only
+    # chariot's seeded connection was verified live (2026-06-11); the others are
+    # config-shaped but unproven, so the step stays a verification for chariot
+    # and a manual procedure for the rest.
     return {
         "broker": broker.id,
         "broker_url": f"tcp://{broker.id}:{mqtt.port}",
         "transmission_gateways": transmission,
         "engine_gateways": engine,
         "modules": " ".join(module_slugs),
+        "seeded": broker.service in _IIOT_VERIFIED_BROKERS,
     }
+
+
+# Brokers whose seeded Cirrus connection was verified live, so the mqtt step is
+# a verification rather than a manual procedure. Mirrors the writer's set.
+_IIOT_VERIFIED_BROKERS = frozenset({"chariot"})
 
 
 def _redundancy_pairs(config: ProjectConfig) -> list[dict[str, object]]:

@@ -53,5 +53,21 @@ services:
       - "${CHARIOT_HTTP_PORT}:8080"
       - "${CHARIOT_MQTT_PORT}:1883"
 
+  chariot-trial:
+    image: ${CHARIOT_IMAGE}
+    container_name: chariot-${COMPOSE_PROJECT_NAME}-trial
+    restart: "no"
+    depends_on:
+      - chariot
+    entrypoint: ["/bin/sh", "/chariot-trial.sh"]
+    environment:
+      # Chariot's web admin is the fixed image user `admin`; ADMIN_PASSWORD on the
+      # broker service sets its password. The script defaults the user to `admin`.
+      CHARIOT_HOST: chariot
+      CHARIOT_ADMIN_USER: admin
+      CHARIOT_ADMIN_PASSWORD: ${CHARIOT_ADMIN_PASSWORD}
+    volumes:
+      - ./services/chariot/chariot-trial.sh:/chariot-trial.sh:ro
+
 volumes:
   ignition-data:

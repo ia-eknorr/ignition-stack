@@ -32,7 +32,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The broker defaults to `chariot` (Cirrus Link's own), and the overlay reads the
   Transmission/Engine module slugs from the broker manifest rather than
   hardcoding them. The Cirrus Link modules are pinned to 5.0.3 with fixed
-  download URLs, so a wired stack fetches a known-good module set.
+  download URLs, so a wired stack fetches a known-good module set. The
+  Transmission/Engine **connections are now file-seeded too**: each edge gateway
+  boots with its Sparkplug identity already set (Group ID = project, Edge Node ID
+  = gateway) and pointed at the broker, and the central gateway's Engine boots
+  subscribed - a Chariot pipeline forms with no UI clicks, verified end to end on
+  8.3.6 (`verification/iiot-spike/`). Chariot's licensed MQTT listener is started
+  via a one-shot trial init container (replaceable by a real `LICENSE_TYPE` env).
+  The seeds are role-scoped - Transmission lands only on transmission-attached
+  gateways, Engine only on engine-attached ones - and `.j2` seed files render the
+  per-gateway identity at generation time. EMQX/HiveMQ/RabbitMQ receive the same
+  config-shaped seeds (credentials stripped for the anonymous brokers); only the
+  Chariot pipeline was live-verified.
 - **Zero-touch Keycloak OIDC seeding.** Adding Keycloak pre-seeds a realm, an
   Ignition OIDC client with a fixed demo client secret, and a `demo` / `demo`
   user, and writes the gateway's identity-provider config to match - so an OIDC

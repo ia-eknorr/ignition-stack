@@ -18,6 +18,7 @@ Set ``UPDATE_GOLDENS=1`` to regenerate the golden snapshot this file checks.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -27,6 +28,7 @@ import pytest
 from ignition_stack.catalog.loader import load_catalog
 from ignition_stack.catalog.schema import SHA256_UNPINNED, ModuleEntry
 from ignition_stack.compose.engine import render_compose
+from ignition_stack.compose.writer import write_project
 from ignition_stack.config import ProjectConfig
 from ignition_stack.profiles import ProfileOptions, apply_iiot, build_profile
 from ignition_stack.services.loader import load_all_services
@@ -264,3 +266,119 @@ def test_hub_and_spoke_iiot_compose_golden() -> None:
     config = resolve(build_profile("hub-and-spoke", "hsiiot", ProfileOptions(iiot=True, spokes=2)))
     rendered = render_compose(config, catalog=load_catalog())
     _check_or_update_golden("combos/hub-and-spoke-iiot-chariot/docker-compose.yaml", rendered)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 4: role-scoped seed placement + .j2 rendering (live-proven shape)
+# --------------------------------------------------------------------------- #
+
+_TX_ID = "com.cirruslink.mqtt.transmission.gateway"
+_EN_ID = "com.cirruslink.mqtt.engine.gateway"
+
+
+def _gw_resources(root: Path, gw_dir: str, plugin: str) -> Path:
+    return root / "services" / gw_dir / "config" / "resources" / "core" / plugin
+
+
+def test_role_scoped_seeds_land_only_on_the_matching_role(tmp_path: Path) -> None:
+    """Transmission seeds land only on transmission-attached gateways, Engine
+    seeds only on engine-attached ones - never crossed."""
+    config = resolve(build_profile("hub-and-spoke", "plant", ProfileOptions(iiot=True, spokes=2)))
+    root = tmp_path / "plant"
+    write_project(config, root)
+
+    # Hub (engine role) gets Engine, never Transmission.
+    assert _gw_resources(root, "hub", _EN_ID).is_dir()
+    assert not _gw_resources(root, "hub", _TX_ID).exists()
+    # Each spoke (transmission role) gets Transmission, never Engine.
+    for spoke in ("spoke-1", "spoke-2"):
+        assert _gw_resources(root, spoke, _TX_ID).is_dir()
+        assert not _gw_resources(root, spoke, _EN_ID).exists()
+
+
+def test_standalone_self_loop_gets_both_role_trees(tmp_path: Path) -> None:
+    """A single-gateway shape carries both roles, so both trees land on it."""
+    config = resolve(build_profile("standalone", "solo", ProfileOptions(iiot=True)))
+    root = tmp_path / "solo"
+    write_project(config, root)
+    assert _gw_resources(root, "ignition", _TX_ID).is_dir()
+    assert _gw_resources(root, "ignition", _EN_ID).is_dir()
+
+
+def test_seed_identity_is_templated_from_project_and_gateway(tmp_path: Path) -> None:
+    """Group ID = project, Edge Node ID = gateway (dir + field), URL from wires."""
+    config = resolve(build_profile("hub-and-spoke", "plant", ProfileOptions(iiot=True, spokes=2)))
+    root = tmp_path / "plant"
+    write_project(config, root)
+
+    tx = _gw_resources(root, "spoke-1", _TX_ID)
+    # The transmitter resource directory itself is named for the gateway.
+    transmitter = tx / "transmitter" / "spoke-1" / "config.json"
+    assert transmitter.is_file()
+    tj = json.loads(transmitter.read_text())
+    assert tj["groupId"] == "plant"  # Group ID = project name
+    assert tj["edgeNodeId"] == "spoke-1"  # Edge Node ID = gateway name
+
+    # The server connection URL comes from the broker's wires.mqtt port.
+    server = json.loads((tx / "server" / "Chariot SCADA" / "config.json").read_text())
+    assert server["url"] == "tcp://chariot:1883"
+
+    # The hub's Engine server points at the same broker endpoint.
+    en_server = json.loads((_gw_resources(root, "hub", _EN_ID) / "server" / "Chariot SCADA" / "config.json").read_text())
+    assert en_server["url"] == "tcp://chariot:1883"
+
+
+def test_chariot_seed_carries_jwe_credentials(tmp_path: Path) -> None:
+    """chariot needs MQTT auth (admin/changeme), so the seed carries the JWE blob."""
+    config = resolve(build_profile("standalone", "solo", ProfileOptions(iiot=True)))
+    root = tmp_path / "solo"
+    write_project(config, root)
+    server = json.loads((_gw_resources(root, "ignition", _TX_ID) / "server" / "Chariot SCADA" / "config.json").read_text())
+    assert server["username"] == "admin"
+    assert server["password"]["type"] == "Embedded"
+    assert set(server["password"]["data"]) >= {"ciphertext", "encrypted_key", "iv", "protected", "tag"}
+
+
+def test_anonymous_broker_seed_strips_credentials(tmp_path: Path) -> None:
+    """emqx/hivemq allow anonymous MQTT, so their seeds omit username/password
+    while still carrying the broker URL (config-shaped, not live-verified)."""
+    for broker in ("emqx", "hivemq"):
+        config = resolve(build_profile("standalone", broker, ProfileOptions(iiot=True, iiot_broker=broker)))
+        root = tmp_path / broker
+        write_project(config, root)
+        server = json.loads((_gw_resources(root, "ignition", _TX_ID) / "server" / "Chariot SCADA" / "config.json").read_text())
+        assert "username" not in server
+        assert "password" not in server
+        assert server["url"] == f"tcp://{broker}:1883"
+
+
+def test_non_j2_seed_files_are_byte_identical_to_source(tmp_path: Path) -> None:
+    """A non-.j2 seed (the general/config.json) is copied unchanged from the tree."""
+    from ignition_stack.compose.writer import _iiot_root
+
+    config = resolve(build_profile("standalone", "solo", ProfileOptions(iiot=True)))
+    root = tmp_path / "solo"
+    write_project(config, root)
+    src = _iiot_root() / "gateway-resources-mqtt-transmission" / "config" / "resources" / "core" / _TX_ID / "general" / "config.json"
+    out = (_gw_resources(root, "ignition", _TX_ID) / "general" / "config.json").read_bytes()
+    assert out == src.read_bytes()
+
+
+def test_no_iiot_means_no_cirrus_seeds(tmp_path: Path) -> None:
+    """A broker selected without the IIoT overlay seeds no Cirrus resources."""
+    root = tmp_path / "plain"
+    write_project(ProjectConfig(name="plain", services=["chariot"]), root)
+    assert not _gw_resources(root, "ignition", _TX_ID).exists()
+    assert not _gw_resources(root, "ignition", _EN_ID).exists()
+
+
+def test_chariot_compose_gains_the_trial_init(tmp_path: Path) -> None:
+    """The chariot fragment ships a one-shot trial init that starts the license."""
+    config = resolve(build_profile("standalone", "solo", ProfileOptions(iiot=True)))
+    rendered = render_compose(config, catalog=load_catalog())
+    assert "chariot-trial:" in rendered
+    assert "/chariot-trial.sh" in rendered
+    # The hand-readable trial script ships into the chariot service dir.
+    root = tmp_path / "solo"
+    write_project(config, root)
+    assert (root / "services" / "chariot" / "chariot-trial.sh").is_file()

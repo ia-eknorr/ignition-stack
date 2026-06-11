@@ -18,9 +18,9 @@
 {%- if edition_override %}
     IGNITION_EDITION: {{ edition_override }}
 {%- endif %}
-{%- if module_identifiers %}
-    ACCEPT_MODULE_LICENSES: "{{ module_identifiers }}"
-    ACCEPT_MODULE_CERTS: "{{ module_identifiers }}"
+{%- if accept_module_identifiers %}
+    ACCEPT_MODULE_LICENSES: "{{ accept_module_identifiers }}"
+    ACCEPT_MODULE_CERTS: "{{ accept_module_identifiers }}"
 {%- endif %}
 {%- if disable_active %}
     GATEWAY_MODULES_ENABLED: "{{ modules_enabled }}"

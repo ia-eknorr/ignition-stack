@@ -1,0 +1,7 @@
+# Live state pulled off running containers during the spike (not committed;
+# canonical contents are transcribed in README.md).
+captured/
+# Throwaway generated compose project used to drive the spike, plus the
+# one-off script that produced it (repro is documented in README.md instead).
+generated/
+gen.py

@@ -1,0 +1,21 @@
+{
+  "alarmDisplayPathType": "IDS_AND_EDGE",
+  "blockDeviceCommands": true,
+  "blockNodeCommands": true,
+  "blockTagPropertyChanges": false,
+  "customProperties": "{}",
+  "enableAlarmEventPublishing": true,
+  "enableBdSeqChecking": true,
+  "enableEngine": true,
+  "enableLatching": false,
+  "h2dbDirectory": "/usr/local/bin/ignition/data",
+  "h2dbPort": 9098,
+  "includeSecurityContext": false,
+  "latchTimeout": 2000,
+  "metricTimestampValidation": true,
+  "rebirthDebounceDelay": 5000,
+  "reorderingTimeout": 0,
+  "sparkplugMessageHandlerThreadCount": 500,
+  "storeHistoricalEvents": true,
+  "useCirrusEncoder": true
+}

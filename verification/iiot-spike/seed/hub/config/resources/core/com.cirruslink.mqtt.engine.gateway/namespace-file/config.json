@@ -1,0 +1,7 @@
+{
+  "addTopicTokens": false,
+  "basicFileAttributesPolicy": "APPEND_TO_FILENAME",
+  "fileHostType": "ACTIVE",
+  "fileStoringPolicy": "REPLACE_EXISTING_FILE",
+  "ignoreFiles": true
+}

@@ -39,8 +39,8 @@ services:
       - hub-data:/usr/local/bin/ignition/data
     environment:
       <<: *ignition-environment
-      ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.engine.gateway"
-      ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.engine.gateway"
+      ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.engine.gateway,com.cirruslink.mqtt.transmission.gateway"
+      ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.engine.gateway,com.cirruslink.mqtt.transmission.gateway"
       GATEWAY_NETWORK_ENABLED: "true"
       GATEWAY_NETWORK_ALLOWINCOMING: "true"
       GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
@@ -78,8 +78,8 @@ services:
     environment:
       <<: *ignition-environment
       IGNITION_EDITION: edge
-      ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.transmission.gateway"
-      ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.transmission.gateway"
+      ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.engine.gateway,com.cirruslink.mqtt.transmission.gateway"
+      ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.engine.gateway,com.cirruslink.mqtt.transmission.gateway"
       GATEWAY_NETWORK_ENABLED: "true"
       GATEWAY_NETWORK_ALLOWINCOMING: "true"
       GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
@@ -120,8 +120,8 @@ services:
     environment:
       <<: *ignition-environment
       IGNITION_EDITION: edge
-      ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.transmission.gateway"
-      ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.transmission.gateway"
+      ACCEPT_MODULE_LICENSES: "com.cirruslink.mqtt.engine.gateway,com.cirruslink.mqtt.transmission.gateway"
+      ACCEPT_MODULE_CERTS: "com.cirruslink.mqtt.engine.gateway,com.cirruslink.mqtt.transmission.gateway"
       GATEWAY_NETWORK_ENABLED: "true"
       GATEWAY_NETWORK_ALLOWINCOMING: "true"
       GATEWAY_NETWORK_SECURITYPOLICY: "Unrestricted"
@@ -161,6 +161,22 @@ services:
     ports:
       - "${CHARIOT_HTTP_PORT}:8080"
       - "${CHARIOT_MQTT_PORT}:1883"
+
+  chariot-trial:
+    image: ${CHARIOT_IMAGE}
+    container_name: chariot-${COMPOSE_PROJECT_NAME}-trial
+    restart: "no"
+    depends_on:
+      - chariot
+    entrypoint: ["/bin/sh", "/chariot-trial.sh"]
+    environment:
+      # Chariot's web admin is the fixed image user `admin`; ADMIN_PASSWORD on the
+      # broker service sets its password. The script defaults the user to `admin`.
+      CHARIOT_HOST: chariot
+      CHARIOT_ADMIN_USER: admin
+      CHARIOT_ADMIN_PASSWORD: ${CHARIOT_ADMIN_PASSWORD}
+    volumes:
+      - ./services/chariot/chariot-trial.sh:/chariot-trial.sh:ro
 
 volumes:
   hub-data:
