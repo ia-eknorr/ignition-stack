@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-06-11
 
 ### Added
 
@@ -58,6 +58,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   module drop-in toggle, which scaffolds `modules/dropin/`. This restores the
   capability the removed `mcp-n8n` profile provided, now expressible as Basic +
   n8n + MCP drop-in.
+- **Back navigation in the wizard.** Select prompts carry a dim `← Back`
+  choice and back-able confirms render as Yes/No/Back, so a wrong answer no
+  longer means Ctrl-C and starting over. Going back re-asks from that step
+  forward with the prior answers replayed as defaults; an answer that is no
+  longer legal for the changed earlier choice falls back to the step's
+  default, and steps that stop applying are skipped in both directions.
+- **Config preview at the summary.** The wizard summary (and the composer's
+  done-select) gains a **Preview** action that prints the fully resolved
+  config — the same output as `init --dry-run` — and returns to the summary,
+  so the exact project can be inspected before choosing generate or cancel.
 
 ### Changed
 
@@ -108,6 +118,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   drop-in). Stale vocabulary ("profile", "Quick/Custom track", "Wire an MQTT
   pipeline", arrow-key hints) is removed, and every page is tightened for a
   reader who knows Docker and Ignition basics.
+- **Wizard prompt copy reads like a standard CLI.** Questions and choice
+  labels are short and neutral: the "(recommended)" steering is gone (the
+  default cursor position carries the suggestion), the IIoT gate asks about
+  the outcome (`Add IIoT (MQTT/Sparkplug)?`) instead of naming Cirrus Link
+  before offering four brokers, service manifest summaries are tightened, and
+  punctuation/separators are consistent throughout. The misleading
+  `(Use arrow keys)` instruction is suppressed on selects (j/k and arrows both
+  work) and the checkbox hint shrinks to `(space to toggle)`.
 
 ### Removed
 
@@ -346,6 +364,7 @@ RUNNING with no manual UI steps.
 - Releases publish to PyPI automatically through GitHub Actions using Trusted
   Publishing (OIDC), with no stored API token.
 
+[0.6.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.2.0...v0.3.0
