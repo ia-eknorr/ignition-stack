@@ -1,11 +1,11 @@
 ---
 title: Wire an IIoT pipeline
-description: Add a Sparkplug MQTT pipeline to any topology with --iiot. The overlay adds a broker and wires the Cirrus Link Transmission/Engine modules by role — edge-side gateways publish, central gateways aggregate.
+description: Add a Sparkplug MQTT pipeline to any topology with --iiot — a broker plus the Cirrus Link Transmission/Engine modules wired by role.
 ---
 
 # Wire an IIoT pipeline
 
-The `--iiot` overlay adds a Sparkplug B MQTT pipeline on top of any topology. It adds an MQTT broker to the stack and installs the Cirrus Link **Transmission** and **Engine** modules on the gateways by role:
+The `--iiot` overlay adds a Sparkplug B MQTT pipeline to any topology: an MQTT broker plus the Cirrus Link **Transmission** and **Engine** modules, wired to the gateways by role:
 
 - **Edge-side gateways** (spokes in hub-and-spoke, frontends in scale-out) get Transmission — they publish Sparkplug messages to the broker.
 - **Central gateways** (hub, backend) get Engine — they subscribe and aggregate.
@@ -38,13 +38,13 @@ The broker slug must be a catalog `mqtt-broker` kind. The available options are:
 
 ## In the wizard
 
-The Quick track's IIoT prompt appears after the redundancy step:
+The IIoT prompt appears after the redundancy step:
 
 ```text
-? Wire an MQTT pipeline (Cirrus Transmission/Engine + broker)?  No
+? Add IIoT (MQTT/Sparkplug)?  No
 ```
 
-Accepting opens a broker select defaulting to `chariot`. The remaining wizard prompts are unchanged; the overlay is applied to the resolved config before generation.
+Accepting opens a broker select defaulting to `chariot`. The overlay is applied to the resolved config before generation.
 
 ## What gets generated
 
@@ -74,19 +74,19 @@ This gives a fresh deployment a working pipeline automatically. For a real deplo
 
 **Ignition trial interaction**: Ignition itself has a ~2-hour platform trial. The Cirrus modules run inside that trial window, so the pipeline will stop working when the trial expires. The reliable reset is the **Reset Trial** button in the Ignition gateway UI (or `POST /data/api/v1/trial`). A volume wipe is always a clean slate. Demo posture only.
 
-## In the composer (Custom track)
+## In the composer
 
-The Custom wizard's composer exposes an explicit action:
+The [composer](./wizard.md#the-composer) (reached from the summary's **Tweak** action) exposes an explicit action:
 
 ```text
-? Composer action?  Wire or unwire the MQTT (IIoT) pipeline
+? Composer action?  Add or remove IIoT (MQTT/Sparkplug)
 ```
 
 This applies or removes the same overlay: one broker instance, Transmission attachments on edge-side roles, Engine on central roles. The broker select appears when wiring.
 
-You can also attach a gateway to an existing broker instance manually and choose its role:
+You can also wire a broker by hand and choose its role:
 
-- **Add a service to a gateway** → select the broker → choose `mqtt-transmission` or `mqtt-engine`.
+- **Add a service** → select the broker → attach to gateway(s) → choose `mqtt-transmission` or `mqtt-engine`.
 - **Share an existing instance** → select the broker → choose the attachment role.
 
 Every mutation is validated immediately; wiring an Edge gateway as Engine, or wiring two brokers, is rejected up front.

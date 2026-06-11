@@ -95,6 +95,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`external` / `scaffold`) and `network`; `init` gains `--proxy-network` and its
   `--reverse-proxy` flag now takes the mode. The two redundant wizard options
   ("external" / "skip", both no-ops) are gone.
+- **Docs restructured around the architecture-first mental model, with a
+  conciseness pass throughout.** The Profiles section is now Architectures
+  (index plus one page per architecture, each linking the matching IA system
+  architecture). The wizard guide is rewritten to cover the step machine, back
+  navigation, the breadcrumb header, the services stage (attach-or-flat), env
+  overrides, preview, and the current composer action set — every quoted prompt
+  now matches `wizard.py` / `wizard_composer.py` verbatim. A new reverse-proxy
+  guide documents external vs. scaffold modes, network detection, Traefik
+  labels, and the `*.localtest.me` URLs. Service pages carry the Connections
+  reference facts (the Chariot `admin/changeme` MQTT quirk, n8n's wizard MCP
+  drop-in). Stale vocabulary ("profile", "Quick/Custom track", "Wire an MQTT
+  pipeline", arrow-key hints) is removed, and every page is tightened for a
+  reader who knows Docker and Ignition basics.
 
 ### Removed
 

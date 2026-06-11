@@ -5,7 +5,7 @@ description: n8n workflow automation engine, pairs with the Ignition MCP module.
 
 # n8n
 
-n8n is a workflow automation engine. It is the catalog's user-facing service, so when the network split is on it lands on the `frontend` network rather than the `backend`. It pairs with the Ignition MCP module: add the n8n service and set `mcp_dropin` in a declarative config to scaffold the MCP module drop-in alongside it.
+n8n is a workflow automation engine. It is the catalog's user-facing service, so when the network split is on it lands on the `frontend` network rather than the `backend`. It pairs with the Ignition MCP module: add the n8n service and the wizard offers to scaffold the MCP module drop-in alongside it.
 
 | | |
 | --- | --- |
@@ -17,7 +17,7 @@ n8n is a workflow automation engine. It is the catalog's user-facing service, so
 
 ## How it reaches a stack
 
-n8n is added as a service in a declarative config or through the composer. Pair it with `mcp_dropin: true` to scaffold the Early-Access Ignition MCP module drop-in, bridging n8n and the gateway. (A guided wizard path for adding n8n + MCP returns in a later release.)
+Add n8n as a service in the [wizard's services stage](../guides/wizard.md#the-services-stage), the composer, or a [declarative config](../guides/declarative-config.md). When you add it, the wizard asks whether to scaffold the Early-Access Ignition MCP module drop-in (`mcp_dropin: true`), which bridges n8n and the gateway for MCP workflows.
 
 ## Preset ports
 

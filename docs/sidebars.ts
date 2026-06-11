@@ -82,11 +82,12 @@ const sidebars: SidebarsConfig = {
       label: "Guides",
       items: [
         "guides/wizard",
-        "guides/reset-and-reshape",
         "guides/declarative-config",
         "guides/iiot-overlay",
+        "guides/reverse-proxy",
         "guides/redundancy",
         "guides/disable-builtins",
+        "guides/reset-and-reshape",
         "guides/teardown",
       ],
     },

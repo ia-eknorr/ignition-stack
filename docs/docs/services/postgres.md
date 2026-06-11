@@ -5,7 +5,7 @@ description: PostgreSQL, the default Ignition historian and SQL store, with a pr
 
 # Postgres
 
-PostgreSQL is the default database for every architecture and the recommended pick in the wizard. It backs the Ignition historian and any SQL-driven demo, and it is the one service that arrives with its gateway connection already wired up.
+PostgreSQL is the default database for every architecture and the wizard's default answer. It backs the Ignition historian and any SQL-driven demo, and it is the one service that arrives with its gateway connection already wired up.
 
 | | |
 | --- | --- |

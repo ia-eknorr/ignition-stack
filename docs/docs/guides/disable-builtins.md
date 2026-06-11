@@ -5,9 +5,7 @@ description: Choose which shipped IA modules run — the wizard pre-selects a le
 
 # Disable built-in modules
 
-Every Ignition gateway ships with a set of built-in IA modules — Vision, SFC, the PLC drivers, the JDBC drivers, and more. A demo often needs only a few of them, and turning the rest off slims the stack down. `ignition-stack` lets you express which modules run and does the rest.
-
-There are two ways in, depending on how you start a stack:
+Every Ignition gateway ships with built-in IA modules — Vision, SFC, the PLC drivers, the JDBC drivers, and more. A demo usually needs only a few; turning the rest off slims the stack down. Two ways in, depending on how you start a stack:
 
 - **The interactive wizard is opt-in.** It pre-selects a small curated set — Perspective, OPC-UA, SQL Bridge, the historian pair, Alarm Notification, Reporting, and the JDBC driver matching your database — and you add or remove from there. The common path is one keystroke: accept the lean default and move on.
 - **The CLI is opt-out.** `--disable-builtin <slug>` (repeatable) turns modules off on top of the full set; pass none and every built-in stays on, so non-interactive architecture builds are unchanged.

@@ -16,13 +16,13 @@ ignition-stack init demo --arch basic
 cd demo && docker compose up -d
 ```
 
-That installs the CLI, generates a one-gateway-plus-Postgres project, and brings it up with a `VALID` database connection already wired in. See [Installation](./get-started/installation.md) and [Quickstart](./get-started/quickstart.md) for the full walkthrough.
+That generates a one-gateway-plus-Postgres project and brings it up with a `VALID` database connection already wired in. See [Installation](./get-started/installation.md) and [Quickstart](./get-started/quickstart.md) for the full walkthrough.
 
 ## How it fits together
 
-A generated project is plain Docker Compose with no hidden state. The CLI's job is to resolve your answers into that project and seed as much as Ignition 8.3 can read from the filesystem.
+A generated project is plain Docker Compose with no hidden state. The CLI resolves your answers into that project and seeds as much as Ignition 8.3 can read from the filesystem.
 
-- **[Profiles](./architectures/index.md)** decide the shape of the stack: how many gateways, in what roles, on what network layout.
+- **[Architectures](./architectures/index.md)** decide the shape of the stack: how many gateways, in what roles, on what network layout.
 - **[Services](./services/index.md)** are the containers that run alongside the gateways: databases, MQTT brokers, an identity provider, simulators, and an automation engine.
 - **[Concepts](./concepts/how-generation-works.md)** explain how generation, the capability resolver, the configuration record, and seeding work.
 - **[Guides](./guides/reset-and-reshape.md)** cover the day-to-day tasks: resetting, reshaping, and tearing a stack down.

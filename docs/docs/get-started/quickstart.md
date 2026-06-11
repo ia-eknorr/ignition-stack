@@ -21,7 +21,7 @@ The gateway reaches `RUNNING` with no UI prompts. Open `http://localhost:9088` a
 
 ## Use the wizard instead
 
-Run `init` without `--arch` to walk the interactive wizard, which prompts for the architecture, database, edition, and optional reverse proxy:
+Run `init` without `--arch` to walk the interactive [wizard](../guides/wizard.md). It opens architecture-first, then prompts for the database, edition, IIoT, services, and exposure, ending in a summary you can preview, tweak, or generate:
 
 ```sh
 ignition-stack init demo

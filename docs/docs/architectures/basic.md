@@ -5,7 +5,7 @@ description: One Ignition 8.3 gateway plus an optional SQL database. The default
 
 # Basic architecture
 
-One Ignition 8.3 gateway plus an optional SQL database. This is the default starter shape and the lightest demo to spin up, and it is the same walking skeleton the rest of the architectures build on.
+One Ignition 8.3 gateway plus an optional SQL database — the default starter shape, and the skeleton the other architectures build on.
 
 ## What you get
 
@@ -36,4 +36,4 @@ docker compose up -d
 
 ## When to use it
 
-Reach for basic when you want a single gateway with a working historian database and nothing else to reason about. Because Postgres seeds its gateway connection, the stack comes up with a `VALID` database connection and no manual setup. To run the gateway as Edge instead of standard, pass `--edge-role gateway`. To drop the database entirely, choose "No database" in the wizard.
+Reach for basic when you want a single gateway with a working historian and nothing else to reason about. Postgres seeds its gateway connection, so the stack comes up `VALID` with no manual setup. Pass `--edge-role gateway` to run the gateway as Edge, or choose `None` at the database prompt to drop the database.

@@ -17,7 +17,7 @@ ignition-stack init demo --arch hub-and-spoke --redundant hub
 ignition-stack init demo --arch basic --redundant gateway
 ```
 
-The wizard asks the same question ("Make the _role_ gateway redundant?") for the eligible architectures.
+The wizard asks the same question (`Enable redundancy for the <role> gateway?`) for the eligible architectures.
 
 Redundancy applies to a **single** gateway. Replicated tiers - scale-out frontends, hub-and-spoke spokes - scale out horizontally rather than failing over, so `--redundant frontend` and `--redundant spoke` are rejected. (Ignition has no active/active or N-way redundancy; it is master/backup only.)
 

@@ -5,7 +5,7 @@ description: Use init --dry-run to dump a stack's resolved configuration, edit i
 
 # Dump, edit, and rebuild a stack
 
-A stack is fully described by its resolved [configuration record](../concepts/configuration-record.md). `init` can print that config instead of building (`--dry-run`) and build from a saved copy instead of an architecture (`-f`). Together they make generation declarative: dump what an architecture would build, hand-edit the parts you want to change, and rebuild from the file.
+A stack is fully described by its resolved [configuration record](../concepts/configuration-record.md). `init --dry-run` prints that config instead of building; `init -f` builds from a saved copy instead of an architecture. Together they make generation declarative: dump what an architecture would build, hand-edit it, and rebuild from the file.
 
 ## Dump the resolved config
 

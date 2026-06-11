@@ -4,7 +4,7 @@
 [![Docs](https://github.com/ia-eknorr/ignition-stack/actions/workflows/docs.yml/badge.svg)](https://github.com/ia-eknorr/ignition-stack/actions/workflows/docs.yml)
 [![Documentation](https://img.shields.io/badge/docs-ia--eknorr.github.io-blue)](https://ia-eknorr.github.io/ignition-stack/)
 
-CLI that generates ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos and SE engagements. Picks a system architecture, asks a few questions, writes a self-contained project with a hand-readable compose file, env, file-config seed resources, and a `POST-SETUP.md` listing only what could not be pre-seeded.
+CLI that generates ready-to-run Docker Compose stacks for Ignition 8.3 SCADA demos and SE engagements. Pick a system architecture (`basic`, `scale-out`, or `hub-and-spoke`), layer on services, and it writes a self-contained project: a hand-readable compose file, `.env`, file-config seed resources, and a `POST-SETUP.md` listing only what could not be pre-seeded.
 
 See [`docs/docs/reference/seeding-matrix.md`](docs/docs/reference/seeding-matrix.md) for which Ignition 8.3 connection types can be provisioned from the filesystem and env on a live 8.3.6 gateway. Full documentation lives in the [`docs/`](docs/) Docusaurus site.
 
@@ -26,12 +26,14 @@ pipx install git+https://github.com/ia-eknorr/ignition-stack.git@<branch>
 Generate a project and bring it up:
 
 ```sh
-ignition-stack init demo
+ignition-stack init demo --arch basic
 cd demo
 docker compose up -d
 ```
 
 The gateway reaches RUNNING with no UI prompts. The admin user is `admin / password` and the gateway is at `http://localhost:9088`. The default Postgres credentials are `ignition / ignition` on the `db` service.
+
+Run `init` without `--arch` to walk the interactive wizard instead: it opens architecture-first, then layers database, edition, IIoT, services, and exposure on top, with a summary you can preview, tweak, or generate.
 
 Everything that ships in the generated project is hand-readable: `docker-compose.yaml`, `.env`, `scripts/docker-bootstrap.sh`, and a `services/ignition/` resources tree the gateway reads on first boot.
 

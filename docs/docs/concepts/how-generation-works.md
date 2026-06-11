@@ -95,8 +95,8 @@ Every supported combination has a golden snapshot under `tests/golden/architectu
 
 The goldens cover:
 
-- `standalone-postgres/` - the standalone-plus-Postgres baseline (regression contract).
-- `scaleout-skeleton/` - two gateways (frontend + backend), network split, frontend running Edge with the `mqtt-engine` module attached.
+- `standalone-postgres/` - the basic one-gateway-plus-Postgres baseline (regression contract).
+- `scaleout-skeleton/` - the scale-out shape: two gateways (frontend + backend), network split, frontend running Edge with the `mqtt-engine` module attached.
 - `services/<name>/` - one minimal snapshot per catalog service (and per database kind).
 - `combos/` - key combinations: the smoke stack (Postgres + HiveMQ + OPC-UA-sim) and a network-split stack.
 
