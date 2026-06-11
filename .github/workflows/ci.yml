@@ -1,7 +1,7 @@
 name: ci
 
 # Proves the CLI installs and generates correct projects on macOS, Linux, and
-# Windows, and that a generated standalone + Postgres stack actually boots a
+# Windows, and that a generated basic + Postgres stack actually boots a
 # gateway to RUNNING on Linux. The docs site build/deploy lives in docs.yml.
 
 on:
@@ -38,7 +38,7 @@ jobs:
         run: |
           uv run ignition-stack --version
           uv run ignition-stack init ci-demo \
-            --profile standalone -o "$RUNNER_TEMP/gen"
+            --arch basic -o "$RUNNER_TEMP/gen"
 
       - name: Golden tests
         run: uv run --extra dev pytest
@@ -78,10 +78,10 @@ jobs:
       - name: Install the CLI
         run: uv sync --extra dev
 
-      - name: Generate a standalone + Postgres project
+      - name: Generate a basic + Postgres project
         run: >-
           uv run ignition-stack init smoke
-          --profile standalone -o "$RUNNER_TEMP"
+          --arch basic -o "$RUNNER_TEMP"
 
       - name: docker compose up -d
         working-directory: ${{ runner.temp }}/smoke
