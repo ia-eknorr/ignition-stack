@@ -611,6 +611,7 @@ def test_wizard_proxy_joins_detected_network(monkeypatch) -> None:
             False,  # customize modules
             "proxy",  # exposure -> reverse proxy
             True,  # join detected 'proxy' network?
+            False,  # services stage: add a service? -> no
             "generate",  # summary
         ]
     )
@@ -634,6 +635,7 @@ def test_wizard_proxy_names_network_when_undetected(monkeypatch) -> None:
             "proxy",  # exposure
             "named",  # name an existing network
             "edge-net",  # network name
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -656,6 +658,7 @@ def test_wizard_proxy_scaffold_branch(tmp_path: Path, monkeypatch) -> None:
             "proxy",  # exposure
             "scaffold",  # scaffold the repo
             "reverse-proxy",  # path
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -682,6 +685,7 @@ def test_wizard_host_ports_skip_detection(monkeypatch) -> None:
             False,
             False,
             "ports",  # exposure -> host ports
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -707,6 +711,7 @@ def test_wizard_yellow_tier_confirmed_keeps_spoke_count() -> None:
             False,  # customize modules? -> accept lean default
             "ports",  # exposure: host ports
             True,  # advisory confirm
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -729,6 +734,7 @@ def test_wizard_yellow_tier_declined_falls_back_to_4_spokes() -> None:
             False,  # customize modules? -> accept lean default
             "ports",
             False,  # decline advisory
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -751,6 +757,7 @@ def test_wizard_red_tier_confirmed_sets_force() -> None:
             False,  # customize modules? -> accept lean default
             "ports",
             True,  # acknowledge red
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -773,6 +780,7 @@ def test_wizard_red_tier_declined_falls_back() -> None:
             False,  # customize modules? -> accept lean default
             "ports",
             False,  # decline red
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -796,6 +804,7 @@ def test_wizard_scale_out_frontends_and_network_split() -> None:
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "ports",  # exposure: host ports
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -819,6 +828,7 @@ def test_wizard_scale_out_network_split_declined() -> None:
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -837,6 +847,7 @@ def test_wizard_summary_decline_marks_unconfirmed() -> None:
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default
             "ports",
+            False,  # services stage: add a service? -> no
             "cancel",  # cancel at summary
         ]
     )
@@ -876,6 +887,7 @@ def test_wizard_modules_decline_applies_lean_default() -> None:
             False,  # wire IIoT? -> no
             False,  # customize modules? -> accept lean default, no checkbox
             "ports",  # exposure: host ports
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -910,6 +922,7 @@ def test_wizard_modules_jdbc_driver_follows_database() -> None:
             False,  # wire IIoT? -> no
             False,  # accept lean default
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -934,6 +947,7 @@ def test_wizard_modules_customize_inverts_enabled_selection() -> None:
             True,  # customize modules? -> opens checkbox
             ["perspective", "vision"],  # ENABLE only these two
             "ports",  # exposure: host ports
+            False,  # services stage: add a service? -> no
             "generate",  # summary action
         ]
     )
@@ -962,6 +976,7 @@ def test_wizard_modules_no_database_enables_no_jdbc_driver() -> None:
             False,  # wire IIoT? -> no
             False,  # accept lean default
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -988,12 +1003,15 @@ def test_wizard_matches_architecture_build_exactly() -> None:
             False,  # wire IIoT? -> no
             False,  # accept lean module default
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
     outcome = walk("demo", prompter)
     assert outcome.confirmed
-    expected = build_architecture("basic", "demo", ArchOptions(disable_builtins=outcome.options.disable_builtins))
+    # The wizard returns a resolved config (the services stage resolves it before
+    # the summary), so compare against the resolved architecture build.
+    expected = resolve(build_architecture("basic", "demo", ArchOptions(disable_builtins=outcome.options.disable_builtins)))
     assert outcome.config.model_dump(mode="json") == expected.model_dump(mode="json")
 
 
@@ -1013,6 +1031,7 @@ def test_wizard_iiot_declined_leaves_no_broker() -> None:
             False,  # wire IIoT? -> no
             False,  # accept lean default
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )
@@ -1037,6 +1056,7 @@ def test_wizard_iiot_accepted_default_chariot_wired_by_role() -> None:
             "chariot",  # broker (default)
             False,  # accept lean default
             "ports",
+            False,  # services stage: add a service? -> no
             "generate",
         ]
     )

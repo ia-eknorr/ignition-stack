@@ -287,7 +287,10 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
     the cursor never runs before it. Returns a :class:`WizardOutcome` on
     completion.
     """
-    answers: dict[str, Any] = {}
+    # Stash the project name under a reserved key (not a step name) so the
+    # services stage can build the architecture config to mutate. Ignored by
+    # _options_from_answers, which only reads the step-named answers.
+    answers: dict[str, Any] = {"_name": name}
     steps = WIZARD_STEPS
     i = 0
     history: list[int] = []
@@ -341,36 +344,54 @@ def _options_from_answers(answers: Mapping[str, Any]) -> ArchOptions:
     )
 
 
+def _build_base_config(name: str, prompter: Prompter, answers: Mapping[str, Any]) -> tuple[ProjectConfig | None, ArchOptions, list[str]]:
+    """Build the resolved architecture config the services stage + summary share.
+
+    Returns ``(resolved_config, options, advisory_lines)``; ``resolved_config`` is
+    ``None`` only when the hub-and-spoke red-tier acknowledgement was declined
+    (the caller turns that into a cancel). The advisory prompt lives here, ahead
+    of the services stage, so the spoke count the services stage builds against is
+    the same one the summary shows - no divergence between the two.
+    """
+    arch_slug = answers["architecture"]
+    options = _options_from_answers(answers)
+    if arch_slug == "hub-and-spoke":
+        options = _confirm_advisory_if_needed(prompter, options)
+    try:
+        config = build_architecture(arch_slug, name, options)
+    except ArchitectureError as exc:
+        return None, options, [f"advisory: {exc}"]
+    return resolve(config), options, []
+
+
 def _summary_phase(name: str, prompter: Prompter, answers: Mapping[str, Any]) -> Any:
     """Build the config from ``answers`` and run the summary gate.
 
     Returns a :class:`WizardOutcome` for generate/tweak/cancel, or :data:`BACK`
-    when the user chooses to return to the last question. The hub-and-spoke
-    advisory and the preview loop live here so they re-run each time the summary
-    is (re)entered after a back.
+    when the user chooses to return to the last question. The config is taken
+    from the services stage's recorded answer when present (already built,
+    resolved, and mutated by the add-loop); otherwise it is built fresh here. The
+    preview loop lives here so it re-runs each time the summary is (re)entered.
     """
     arch_slug = answers["architecture"]
-    options = _options_from_answers(answers)
-
-    # Hub-and-spoke advisory: ask the user inside the wizard rather than
-    # demanding --force. Yellow asks for confirmation, red asks for the
-    # acknowledgement first and then proceeds via the ``force=True`` path so
-    # the architecture's red-tier guard doesn't block them.
-    if arch_slug == "hub-and-spoke":
-        options = _confirm_advisory_if_needed(prompter, options)
-
-    try:
-        config = build_architecture(arch_slug, name, options)
-    except ArchitectureError as exc:
-        # Only happens if the user declined the red-tier confirmation;
-        # treat as an explicit cancel.
-        return WizardOutcome(
-            config=ProjectConfig(name=name),
-            confirmed=False,
-            architecture=arch_slug,
-            options=options,
-            summary_lines=[f"advisory: {exc}"],
-        )
+    recorded = answers.get("services")
+    if recorded is not None and len(recorded) == 2:
+        config, options = recorded
+    elif recorded is not None:
+        # The services stage recorded a declined red-tier advisory (3-tuple with a
+        # None config); surface it as a cancel, same as the fresh-build path.
+        _config, options, advisory_lines = recorded
+        return WizardOutcome(config=ProjectConfig(name=name), confirmed=False, architecture=arch_slug, options=options, summary_lines=advisory_lines)
+    else:
+        config, options, advisory_lines = _build_base_config(name, prompter, answers)
+        if config is None:
+            return WizardOutcome(
+                config=ProjectConfig(name=name),
+                confirmed=False,
+                architecture=arch_slug,
+                options=options,
+                summary_lines=advisory_lines,
+            )
 
     summary = _summarize(config, arch_slug, options)
     while True:
@@ -690,12 +711,19 @@ def _with(options: ArchOptions, **changes: Any) -> ArchOptions:
 
 
 def _summarize(config: ProjectConfig, arch_slug: str, options: ArchOptions) -> list[str]:
+    # The config reaching here is resolved (registry populated, legacy shims
+    # cleared), so read the database + services off the registry rather than the
+    # emptied ``database`` / ``services`` shims. ``database_instances`` keeps the
+    # auto-added Keycloak store visible; ``non_database_instances`` lists every
+    # service including the deliberately-flat ones the services stage added.
+    dbs = [inst.service for inst in config.database_instances()]
+    svcs = [_service_summary_label(config, inst) for inst in config.non_database_instances()]
     lines = [
         f"architecture : {arch_slug}",
         f"project name : {config.name}",
         f"gateways     : {len(config.gateways)} ({', '.join(f'{g.name}={g.ignition_edition}' for g in config.gateways)})",
-        f"database     : {config.database.kind if config.database else 'none'}",
-        f"services     : {', '.join(config.services) if config.services else '(none)'}",
+        f"database     : {', '.join(dbs) if dbs else 'none'}",
+        f"services     : {', '.join(svcs) if svcs else '(none)'}",
         f"network split: {'on' if config.network_split else 'off'}",
         "redundancy   : " + (f"{options.redundant_role} (master + backup)" if options.redundant_role else "none"),
         "iiot         : " + (f"{options.iiot_broker or 'chariot'} (Transmission/Engine overlay)" if options.iiot else "off"),
@@ -707,6 +735,12 @@ def _summarize(config: ProjectConfig, arch_slug: str, options: ArchOptions) -> l
     if options.force:
         lines.append("advisory     : --force acknowledged")
     return lines
+
+
+def _service_summary_label(config: ProjectConfig, inst: ProjectConfig) -> str:
+    """A service's summary label, tagging the deliberately-flat (unattached) ones."""
+    attached = any(att.instance == inst.id for gw in config.gateways for att in gw.services)
+    return inst.id if attached else f"{inst.id} (flat)"
 
 
 def _proxy_label(proxy: ReverseProxyConfig | None) -> str:
@@ -812,6 +846,38 @@ def _step_exposure(prompter: Prompter, answers: dict[str, Any], allow_back: bool
     return _ask_reverse_proxy(prompter, default=answers.get("exposure"), allow_back=allow_back)
 
 
+def _step_services(prompter: Prompter, answers: dict[str, Any], allow_back: bool) -> Any:
+    """Loop offering "Add a service?" over the built architecture config.
+
+    Builds the resolved base config from the answers so far (the same one the
+    summary would), then loops: confirm "Add a service?" -> run the shared
+    add-flow (pick / placement / per-service follow-ups) -> repeat. The recorded
+    answer is the ``(config, options)`` pair the summary consumes directly, so
+    flat instances and attachments the user composed here flow straight into the
+    build. Returns :data:`BACK` when the user backs out of the *first* "Add a
+    service?" before adding anything (nothing recorded yet); once a service is
+    added the loop only offers stop, never back, so the additions are not lost
+    silently.
+    """
+    from ignition_stack import wizard_composer
+
+    config, options, advisory_lines = _build_base_config(answers["_name"], prompter, answers)
+    if config is None:
+        # Red-tier acknowledgement declined: record the (None-config) so the
+        # summary surfaces the advisory as a cancel; carry the lines through.
+        return (None, options, advisory_lines)
+
+    added = False
+    while True:
+        want = prompter.confirm("Add a service?", default=False, allow_back=allow_back and not added)
+        if want is BACK:
+            return BACK
+        if not want:
+            return (config, options)
+        config = wizard_composer.dispatch_action("add", prompter, config)
+        added = True
+
+
 #: The wizard as an ordered, introspectable list of steps. ``applies`` reads the
 #: chosen architecture so count/split/redundancy steps appear only where they
 #: mean something (and are skipped in both walk directions otherwise). The
@@ -828,6 +894,7 @@ WIZARD_STEPS: list[Step] = [
     Step("iiot", "IIoT", lambda a: True, _step_iiot),
     Step("modules", "Modules", lambda a: True, _step_modules),
     Step("exposure", "Exposure", lambda a: True, _step_exposure),
+    Step("services", "Services", lambda a: True, _step_services),
 ]
 
 
