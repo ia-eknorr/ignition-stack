@@ -21,7 +21,7 @@ from ignition_stack.catalog.builtins import (
     load_builtin_catalog,
 )
 from ignition_stack.catalog.loader import load_catalog
-from ignition_stack.cli import _options_from_config, app
+from ignition_stack.cli import app
 from ignition_stack.compose.engine import render_compose
 from ignition_stack.config import dump_config, load_config
 from ignition_stack.config.schema import GatewayConfig, ProjectConfig
@@ -234,7 +234,7 @@ def test_cli_disable_builtin_flag_emits_whitelist(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "basic",
@@ -259,7 +259,7 @@ def test_cli_unknown_disable_builtin_exits_2(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "basic",
@@ -290,12 +290,3 @@ def test_disable_builtins_survives_dump_load_round_trip(tmp_path: Path) -> None:
     path.write_text(dump_config(config, "yaml"), encoding="utf-8")
     reloaded = load_config(path)
     assert reloaded.gateways[0].disable_builtins == ["vision", "sfc"]
-
-
-def test_switch_arch_recovers_disable_builtins() -> None:
-    """Reshaping a stack (switch-arch) must carry the disabled built-ins, or a
-    an architecture switch would silently re-enable Vision/SFC. Recovery is the slugs
-    disabled on every gateway."""
-    config = build_architecture("scale-out", "demo", ArchOptions(disable_builtins=("vision", "sfc")))
-    recovered = _options_from_config(config)
-    assert set(recovered.disable_builtins) == {"vision", "sfc"}

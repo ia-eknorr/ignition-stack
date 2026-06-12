@@ -2,7 +2,7 @@
 
 Validation criteria:
 
-1. ``ignition-stack init demo --arch scale-out`` emits two networked
+1. ``ignition-stack create demo --arch scale-out`` emits two networked
    gateways (frontend + backend) + a DB; gateway-network link present.
 2. ``--arch hub-and-spoke --spokes 3`` emits 1 hub + 3 spoke gateways;
    ``--spokes 12`` without ``--force`` exits non-zero with the red-tier
@@ -281,7 +281,7 @@ def test_edge_to_standard_aggregation_allowed() -> None:
 
 def test_scale_out_via_cli_writes_project(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(app, ["init", "demo", "--arch", "scale-out", "-o", str(tmp_path)])
+    result = runner.invoke(app, ["create", "demo", "--arch", "scale-out", "-o", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     compose = (tmp_path / "demo" / "docker-compose.yaml").read_text(encoding="utf-8")
     parsed = _parse(compose)
@@ -295,7 +295,7 @@ def test_scale_out_cli_two_frontends_no_split(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "scale-out",
@@ -319,7 +319,7 @@ def test_scale_out_cli_reverse_proxy_scaffold(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "scale-out",
@@ -341,7 +341,7 @@ def test_cli_reverse_proxy_external_with_network(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "basic",
@@ -364,7 +364,7 @@ def test_cli_reverse_proxy_bad_mode_exits_two(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["init", "demo", "--arch", "basic", "--reverse-proxy", "traefik", "-o", str(tmp_path)],
+        ["create", "demo", "--arch", "basic", "--reverse-proxy", "traefik", "-o", str(tmp_path)],
     )
     assert result.exit_code == 2
 
@@ -398,7 +398,7 @@ def test_hub_and_spoke_cli_spokes_3(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "hub-and-spoke",
@@ -421,7 +421,7 @@ def test_hub_and_spoke_cli_red_tier_exits_non_zero(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "hub-and-spoke",
@@ -441,7 +441,7 @@ def test_hub_and_spoke_cli_red_tier_with_force_proceeds(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "init",
+            "create",
             "demo",
             "--arch",
             "hub-and-spoke",

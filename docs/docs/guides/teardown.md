@@ -1,11 +1,11 @@
 ---
 title: Tear down a stack
-description: How make wipe and ignition-stack wipe scope teardown to this project's containers, networks, and volumes and nothing else on the host.
+description: How to scope teardown to this project's containers, networks, and volumes — and nothing else on the host.
 ---
 
 # Tear down a stack
 
-Tearing a stack down should remove exactly what `ignition-stack init` brought up - this project's containers, networks, and volumes - and nothing else on the host. Both teardown paths honour that boundary by pinning the compose project name.
+Tearing a stack down should remove exactly what `ignition-stack create` brought up — this project's containers, networks, and volumes — and nothing else on the host. Both teardown paths below honour that boundary by pinning the compose project name.
 
 ## How scoping works
 
@@ -20,9 +20,9 @@ docker compose -p demo down -v --remove-orphans
 - `-p demo` scopes every operation to the `demo` project label.
 - `down` stops and removes the project's containers and its default network.
 - `-v` removes the named volumes declared in the project's compose file.
-- `--remove-orphans` clears containers that were once in the compose file but have since been removed from it (for example, a gateway dropped by a `switch-arch`).
+- `--remove-orphans` clears containers that were once in the compose file but have since been removed from it.
 
-Nothing here is host-wide. There is no `docker system prune`, no `docker volume prune`, and no `docker volume rm` against an unscoped list - a different stack's volumes are invisible to a `-p`-pinned `down`.
+Nothing here is host-wide. There is no `docker system prune`, no `docker volume prune`, and no `docker volume rm` against an unscoped list — a different stack's volumes are invisible to a `-p`-pinned `down`.
 
 ## Two ways to run it
 
@@ -39,19 +39,16 @@ wipe:
 
 `make wipe` works in any generated project because it needs nothing beyond the compose file and the baked-in name. It is the path to reach for when `ignition-stack` is not installed on the machine running the demo.
 
-### `ignition-stack wipe`
+### The raw docker compose command
 
-The CLI resolves the same command, then runs it from the project directory:
+The same command works anywhere, including on Windows where `make` may not be available:
 
+```sh
+docker compose -p demo down -v --remove-orphans
 ```
-ignition-stack wipe -C ./demo            # tear it down
-ignition-stack wipe -C ./demo --dry-run  # print the command, run nothing
-```
 
-`--dry-run` prints the exact `docker compose -p demo down -v --remove-orphans` it would execute, which is handy for confirming the scope before committing to it.
-
-To resolve the project name, `wipe` prefers the [configuration record](../concepts/configuration-record.md) and falls back to `COMPOSE_PROJECT_NAME` in `.env`. Even if the record is removed, the `.env` still carries the name, so `wipe` scopes correctly either way. Pointed at a directory that holds neither, it exits without guessing.
+Replace `demo` with your compose project name (`COMPOSE_PROJECT_NAME` in `.env`). The `-p` flag scopes the teardown exactly as `make wipe` does — same command, no intermediary.
 
 ## What survives a wipe
 
-A wipe removes runtime state, not the project on disk. The generated tree - `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` - is untouched, so `docker compose up -d` brings the same stack back. The `.ignition-stack/` record survives too; pair `wipe` with [`reset`](./reset-and-reshape.md) to return to a clean baseline between customer sessions without re-walking the wizard.
+A wipe removes runtime state, not the project on disk. The generated tree — `docker-compose.yaml`, `.env`, the seed directories, the `Makefile` — is untouched, so `docker compose up -d` brings the same stack back. The `.ignition-stack/` record survives too; use it with [`create <name> -f`](../concepts/configuration-record.md) to recreate or clone the stack without re-walking the wizard.

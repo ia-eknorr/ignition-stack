@@ -26,14 +26,14 @@ pipx install git+https://github.com/ia-eknorr/ignition-stack.git@<branch>
 Generate a project and bring it up:
 
 ```sh
-ignition-stack init demo --arch basic
+ignition-stack create demo --arch basic
 cd demo
 docker compose up -d
 ```
 
 The gateway reaches RUNNING with no UI prompts. The admin user is `admin / password` and the gateway is at `http://localhost:9088`. The default Postgres credentials are `ignition / ignition` on the `db` service.
 
-Run `init` without `--arch` to walk the interactive wizard instead: it opens architecture-first, then layers database, edition, IIoT, services, and exposure on top, with a summary you can preview, tweak, or generate.
+Run `create` without `--arch` to walk the interactive wizard instead: it opens architecture-first, then layers database, edition, IIoT, services, and exposure on top, with a summary you can preview, tweak, or generate.
 
 Everything that ships in the generated project is hand-readable: `docker-compose.yaml`, `.env`, `scripts/docker-bootstrap.sh`, and a `services/ignition/` resources tree the gateway reads on first boot.
 
@@ -41,11 +41,8 @@ Everything that ships in the generated project is hand-readable: `docker-compose
 
 | Command | What it does |
 | --- | --- |
-| `init <name>` | Generate a project at `./<name>/` from an architecture and a few prompts. |
+| `create <name>` | Generate a project at `./<name>/` from an architecture and a few prompts. |
 | `modules` | Download, verify, and manage the `.modl` / JDBC catalog. |
-| `reset` | Re-run generation from an SE-demo project's recorded config. |
-| `switch-arch` | Reshape an SE-demo project under a different architecture. |
-| `wipe` | Remove this project's containers and volumes only. |
 
 See the [CLI reference](docs/docs/reference/cli.md) for every command, argument, and option.
 

@@ -12,7 +12,7 @@ The goal is a stack that comes up with no UI prompts. Commissioning is env-drive
 
 ```sh
 pipx install git+https://github.com/ia-eknorr/ignition-stack.git
-ignition-stack init demo --arch basic
+ignition-stack create demo --arch basic
 cd demo && docker compose up -d
 ```
 
@@ -25,13 +25,13 @@ A generated project is plain Docker Compose with no hidden state. The CLI resolv
 - **[Architectures](./architectures/index.md)** decide the shape of the stack: how many gateways, in what roles, on what network layout.
 - **[Services](./services/index.md)** are the containers that run alongside the gateways: databases, MQTT brokers, an identity provider, simulators, and an automation engine.
 - **[Concepts](./concepts/how-generation-works.md)** explain how generation, the capability resolver, the configuration record, and seeding work.
-- **[Guides](./guides/reset-and-reshape.md)** cover the day-to-day tasks: resetting, reshaping, and tearing a stack down.
+- **[Guides](./guides/teardown.md)** cover the day-to-day tasks: tearing a stack down, declarative config, and more.
 - **[Reference](./reference/cli.md)** is the lookup layer: every CLI command and the Ignition 8.3 seeding matrix.
 - **[Changelog](https://github.com/ia-eknorr/ignition-stack/blob/main/CHANGELOG.md)** is what's new in each release.
 
-## Every stack is reshapeable
+## Every stack is re-runnable
 
-Every `init` writes a [configuration record](./concepts/configuration-record.md) alongside the runnable tree, so `ignition-stack reset` and `switch-arch` can regenerate or reshape any project later. The same record is portable: `init --dry-run` dumps it and `init -f` rebuilds from it, for a [fully declarative workflow](./guides/declarative-config.md).
+Every `create` writes a [configuration record](./concepts/configuration-record.md) alongside the runnable tree. Pass it back to `create -f` to recreate or clone the stack under a new name — the same file is the input for a [fully declarative workflow](./guides/declarative-config.md).
 
 ## New here?
 

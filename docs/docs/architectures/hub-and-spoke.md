@@ -38,8 +38,8 @@ The wizard surfaces the estimate against available memory so the cost is visible
 ## Run it
 
 ```sh
-ignition-stack init demo --arch hub-and-spoke --spokes 3
-ignition-stack init big-demo --arch hub-and-spoke --spokes 12 --force
+ignition-stack create demo --arch hub-and-spoke --spokes 3
+ignition-stack create big-demo --arch hub-and-spoke --spokes 12 --force
 ```
 
 The second command crosses the red tier, so `--force` is required to proceed non-interactively.

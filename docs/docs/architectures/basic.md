@@ -23,7 +23,7 @@ The single gateway is named `gateway`, so its per-gateway `.env` keys collapse t
 ## Run it
 
 ```sh
-ignition-stack init demo --arch basic
+ignition-stack create demo --arch basic
 ```
 
 Or pick `basic` at the wizard's first prompt. Then:

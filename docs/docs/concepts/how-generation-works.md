@@ -5,7 +5,7 @@ description: The pipeline that turns your answers into a runnable project tree, 
 
 # How generation works
 
-`ignition-stack init` resolves a project configuration into a writable tree on disk. The compose generation engine sits at the heart of that pipeline.
+`ignition-stack create` resolves a project configuration into a writable tree on disk. The compose generation engine sits at the heart of that pipeline.
 
 ## The pipeline
 

@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-12
+
+### Changed
+
+- **`init` is now `create`.** The command creates a new named directory; `init`
+  implied initializing the current one. `ignition-stack create <name>` is the
+  same command with an unambiguous verb — all flags, wizard, and `-f` behaviour
+  are unchanged.
+
+### Removed
+
+- **`reset`, `switch-arch`, and `wipe`.** Stacks are short-lived; recreating
+  beats reshaping. The configuration record (`-f`) already covers
+  regeneration and cloning: `ignition-stack create <name> -f .ignition-stack/config.json`
+  reproduces any recorded stack, and a different name clones it. The generated
+  `Makefile` and the raw scoped `docker compose -p <project> down -v --remove-orphans`
+  command cover teardown without a CLI intermediary, even where `ignition-stack`
+  is not installed. The generated `Makefile` no longer has a `reset:` target.
+
 ## [0.6.1] - 2026-06-12
 
 ### Fixed

@@ -11,7 +11,7 @@ clears. These tests pin the invariants the rest of the codebase depends on:
 - the schema validators (unique ids, attachment refs, db-only fields, unknown
   slug) hold;
 - the Phase-2 property shims work pre- and post-lowering;
-- a v0.4.0-shaped lifecycle record (legacy fields, no registry) still loads.
+- a v0.4.0-shaped config record (legacy fields, no registry) still loads.
 """
 
 from __future__ import annotations
@@ -228,7 +228,7 @@ def test_property_shims_no_database_return_empty() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Backward-compatible lifecycle record (v0.4.0 shape: legacy fields, no registry)
+# Backward-compatible config record (v0.4.0 shape: legacy fields, no registry)
 # --------------------------------------------------------------------------- #
 
 

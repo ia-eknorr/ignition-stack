@@ -11,12 +11,10 @@ from __future__ import annotations
 
 from ignition_stack.wizard import (
     BACK,
-    WIZARD_STEPS,
     _breadcrumb,
     applicable_steps,
     walk,
 )
-
 
 # --------------------------------------------------------------------------- #
 # _breadcrumb: pure function
@@ -164,21 +162,21 @@ def test_walk_with_arch_change_still_produces_correct_config() -> None:
     walk each iteration)."""
     prompter = _ScriptedPrompter(
         [
-            "basic",      # architecture (first pass)
-            "postgres",   # database
-            BACK,         # at edge_role → back to database
-            BACK,         # at database → back to architecture
+            "basic",  # architecture (first pass)
+            "postgres",  # database
+            BACK,  # at edge_role → back to database
+            BACK,  # at database → back to architecture
             "hub-and-spoke",  # architecture (changed)
-            3,            # spoke count (newly applicable)
-            "postgres",   # database (re-asked)
-            "spoke",      # edge_role
-            False,        # network split
-            False,        # redundancy
-            False,        # iiot
-            False,        # modules (decline customize)
-            "ports",      # exposure
-            False,        # services: add a service? → no
-            "generate",   # summary
+            3,  # spoke count (newly applicable)
+            "postgres",  # database (re-asked)
+            "spoke",  # edge_role
+            False,  # network split
+            False,  # redundancy
+            False,  # iiot
+            False,  # modules (decline customize)
+            "ports",  # exposure
+            False,  # services: add a service? → no
+            "generate",  # summary
         ]
     )
     outcome = walk("test-project", prompter)

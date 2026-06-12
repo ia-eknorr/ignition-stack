@@ -5,7 +5,7 @@ description: An architecture-first wizard picks one of Ignition's system archite
 
 # The wizard
 
-Run `ignition-stack init <name>` with no `--arch` and the wizard opens architecture-first: the first question is which [system architecture](../architectures/index.md) you want.
+Run `ignition-stack create <name>` with no `--arch` and the wizard opens architecture-first: the first question is which [system architecture](../architectures/index.md) you want.
 
 ```text
 [1/11] Architecture
@@ -150,4 +150,4 @@ The registry ends with four instances: `emqx`, `keycloak`, `mongo`, and a stack-
 
 ## Round-tripping
 
-A wizard- or composer-built stack saves like any other: `init --dry-run` dumps it, a [declarative config](./declarative-config.md) rebuilds it with `--from-file`, and the lifecycle record drives `reset` and `switch-arch`. The composer is an interactive editor for the same file an SE can version by hand.
+A wizard- or composer-built stack saves like any other: `create --dry-run` dumps it, a [declarative config](./declarative-config.md) rebuilds it with `--from-file`, and the [configuration record](../concepts/configuration-record.md) powers the `create -f` recreate/clone path. The composer is an interactive editor for the same file an SE can version by hand.

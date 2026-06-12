@@ -187,16 +187,16 @@ rm -f "${DL_OUT}"
 
 ############################################################
 log ""
-log "--- 4. init generates a project ---"
+log "--- 4. create generates a project ---"
 ############################################################
 
 rm -rf "${PROJECT_DIR}"
 mkdir -p "${GEN_DIR}"
 
-if ignition-stack init "${PROJECT_NAME}" --output-dir "${GEN_DIR}" >>"${LOG}" 2>&1; then
-  pass "ignition-stack init ${PROJECT_NAME} created project"
+if ignition-stack create "${PROJECT_NAME}" --output-dir "${GEN_DIR}" >>"${LOG}" 2>&1; then
+  pass "ignition-stack create ${PROJECT_NAME} created project"
 else
-  fail "ignition-stack init failed"
+  fail "ignition-stack create failed"
   exit 1
 fi
 

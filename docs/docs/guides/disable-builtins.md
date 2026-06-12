@@ -23,13 +23,13 @@ Whatever you leave unselected becomes `disable_builtins`. The summary screen lis
 
 ## On the command line
 
-Pass `--disable-builtin <slug>` to `init`, once per module:
+Pass `--disable-builtin <slug>` to `create`, once per module:
 
 ```sh
-ignition-stack init demo --disable-builtin vision --disable-builtin sfc
+ignition-stack create demo --disable-builtin vision --disable-builtin sfc
 ```
 
-In a [declarative config](./declarative-config.md), the same intent lives as `disable_builtins` on a gateway, so `init --dry-run` shows exactly what is turned off and a saved config rebuilds it with `--from-file`.
+In a [declarative config](./declarative-config.md), the same intent lives as `disable_builtins` on a gateway, so `create --dry-run` shows exactly what is turned off and a saved config rebuilds it with `--from-file`.
 
 Slugs are the friendly kebab names in the table below and tab-complete on the command line. An unknown slug is rejected up front — at config-construction time and at the wizard/CLI mutation path — with the full list of valid slugs, so a typo never silently slips through.
 
@@ -44,7 +44,7 @@ A few consequences worth knowing:
 - **Nothing disabled, nothing emitted.** If you disable no modules, the variable is omitted entirely, so an existing stack renders byte-for-byte unchanged.
 - **Disabling everything emits an empty whitelist** (which quarantines all modules) rather than omitting the variable and silently re-enabling everything.
 - **The complete built-in set is pinned** in `builtin_modules.yaml`. The inversion needs the full list — a stale one would quarantine forgotten modules — so an opt-in `smoke` test re-derives the set from a booted gateway and fails on drift.
-- **A reshape keeps your choices.** `switch-arch` carries the disabled set across, so changing architectures does not silently bring Vision or SFC back.
+- **Re-running keeps your choices.** `create -f` rebuilds from the recorded config, which includes the disabled set, so re-creating a stack does not silently bring Vision or SFC back.
 
 ## Verify it
 

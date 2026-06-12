@@ -42,7 +42,7 @@ Enable tab-completion for your shell once, then reload it:
 ignition-stack --install-completion
 ```
 
-This completes command names, subcommands, and option flags in bash, zsh, fish, and PowerShell. It also completes dynamic values where the choice is a known set: architecture names for `init --arch` and `switch-arch`, the `--edge-role` values, and catalog entry names for `modules download`. To print the completion script without installing it (to inspect or manage it yourself), use `ignition-stack --show-completion`.
+This completes command names, subcommands, and option flags in bash, zsh, fish, and PowerShell. It also completes dynamic values where the choice is a known set: architecture names for `create --arch`, the `--edge-role` values, and catalog entry names for `modules download`. To print the completion script without installing it (to inspect or manage it yourself), use `ignition-stack --show-completion`.
 
 ## Prerequisites
 

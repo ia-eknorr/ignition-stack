@@ -12,13 +12,13 @@ A stack is fully described by its resolved [configuration record](../concepts/co
 `--dry-run` resolves the config and prints it to stdout without writing any files. It shows the full build input - project name, every gateway with its ports and edition, the database, the selected services, and the network layout - after the resolver has expanded implicit dependencies.
 
 ```sh
-ignition-stack init demo --arch scale-out --dry-run > arch.yml
+ignition-stack create demo --arch scale-out --dry-run > arch.yml
 ```
 
 The default format is YAML, ordered to read top-down (`name` first). Use `--output-format json` for JSON:
 
 ```sh
-ignition-stack init demo --arch scale-out --dry-run --output-format json > arch.json
+ignition-stack create demo --arch scale-out --dry-run --output-format json > arch.json
 ```
 
 `--dry-run` writes nothing to disk - not even the project directory - so it is safe to run anywhere just to inspect what a set of flags would produce.
@@ -28,13 +28,13 @@ ignition-stack init demo --arch scale-out --dry-run --output-format json > arch.
 Open the dumped file and change what you need - bump a gateway's `memory_mb`, add a service, flip `network_split`, rename a gateway. Then build from it with `-f`:
 
 ```sh
-ignition-stack init demo -f arch.yml
+ignition-stack create demo -f arch.yml
 ```
 
 The file is run through the same resolver and writer as an architecture build, so a project built from an architecture and one built from that architecture's dump are byte-identical. The project name argument wins over the file's `name`, so you can stamp out the same topology under different names:
 
 ```sh
-ignition-stack init customer-b -f arch.yml
+ignition-stack create customer-b -f arch.yml
 ```
 
 `-f` is mutually exclusive with `--arch` (the file already specifies the whole topology) and with the wizard (it never prompts). Combining `-f` with `--arch` is an error.
@@ -44,7 +44,7 @@ ignition-stack init customer-b -f arch.yml
 The file is validated against the same schema the wizard and architectures produce. An unknown field, a bad enum, or a malformed document fails with a readable message and a non-zero exit - never a traceback:
 
 ```text
-$ ignition-stack init demo -f broken.yml
+$ ignition-stack create demo -f broken.yml
 error: invalid config in 'broken.yml':
   - database.kind: unsupported database kind 'oracle'; supported: mariadb, mongo, mysql, postgres
 ```

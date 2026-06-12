@@ -87,7 +87,6 @@ const sidebars: SidebarsConfig = {
         "guides/reverse-proxy",
         "guides/redundancy",
         "guides/disable-builtins",
-        "guides/reset-and-reshape",
         "guides/teardown",
       ],
     },

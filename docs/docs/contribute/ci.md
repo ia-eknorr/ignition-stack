@@ -12,7 +12,7 @@ Two GitHub Actions workflows guard the project: `ci.yml` runs on every pull requ
 The `test` job runs a matrix across `macos-latest`, `ubuntu-latest`, and `windows-latest`. On each OS it:
 
 1. Installs the CLI with `uv sync --extra dev`.
-2. Runs `ignition-stack init` for a basic project, so the installed console script is exercised, not just imported.
+2. Runs `ignition-stack create` for a basic project, so the installed console script is exercised, not just imported.
 3. Runs the full golden test suite with `uv run --extra dev pytest`.
 
 The matrix uses `fail-fast: false` so a Windows-only break still reports alongside the macOS and Linux results instead of cancelling them.

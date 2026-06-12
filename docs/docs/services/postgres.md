@@ -17,7 +17,7 @@ PostgreSQL is the default database for every architecture and the wizard's defau
 
 ## How it reaches a stack
 
-The wizard offers Postgres as the default answer to its database prompt, and the non-interactive `ignition-stack init --arch <slug>` path uses it unless you pick another database. The dependency resolver also adds Postgres automatically when another service needs a SQL database (for example [Keycloak](./keycloak.md)).
+The wizard offers Postgres as the default answer to its database prompt, and the non-interactive `ignition-stack create --arch <slug>` path uses it unless you pick another database. The dependency resolver also adds Postgres automatically when another service needs a SQL database (for example [Keycloak](./keycloak.md)).
 
 Credentials live in the shared database section of the generated `.env` (`DB_USER`, `DB_PASSWORD`, `DB_HOST`), so every database kind speaks one credential vocabulary. The defaults are `ignition` / `ignition`.
 

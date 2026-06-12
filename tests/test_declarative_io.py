@@ -40,7 +40,7 @@ def test_dry_run_yaml_writes_nothing(runner: CliRunner, tmp_path: Path) -> None:
     target_parent = tmp_path / "out"
     result = runner.invoke(
         app,
-        ["init", "demo", "--arch", "scale-out", "--dry-run", "-o", str(target_parent)],
+        ["create", "demo", "--arch", "scale-out", "--dry-run", "-o", str(target_parent)],
     )
     assert result.exit_code == 0, result.stdout
     # Nothing on disk: neither the parent nor the project directory was created.
@@ -56,7 +56,7 @@ def test_dry_run_yaml_writes_nothing(runner: CliRunner, tmp_path: Path) -> None:
 
 
 def test_dry_run_defaults_to_yaml(runner: CliRunner) -> None:
-    result = runner.invoke(app, ["init", "demo", "--arch", "basic", "--dry-run"])
+    result = runner.invoke(app, ["create", "demo", "--arch", "basic", "--dry-run"])
     assert result.exit_code == 0, result.stdout
     # YAML, not JSON: the schema-ordered first key is `name`, unquoted.
     assert result.stdout.splitlines()[0] == "name: demo"
@@ -67,7 +67,7 @@ def test_dry_run_json_is_valid_json(runner: CliRunner) -> None:
 
     result = runner.invoke(
         app,
-        ["init", "demo", "--arch", "basic", "--dry-run", "--output-format", "json"],
+        ["create", "demo", "--arch", "basic", "--dry-run", "--output-format", "json"],
     )
     assert result.exit_code == 0, result.stdout
     parsed = json.loads(result.stdout)
@@ -85,7 +85,7 @@ def test_from_file_round_trip_is_byte_identical(runner: CliRunner, tmp_path: Pat
     from_arch = tmp_path / "from-arch"
     from_file = tmp_path / "from-file"
 
-    a = runner.invoke(app, ["init", "demo", "--arch", arch, "-o", str(from_arch)])
+    a = runner.invoke(app, ["create", "demo", "--arch", arch, "-o", str(from_arch)])
     assert a.exit_code == 0, a.stdout
 
     dump = tmp_path / "arch.yml"
@@ -93,7 +93,7 @@ def test_from_file_round_trip_is_byte_identical(runner: CliRunner, tmp_path: Pat
         dump_config(resolve(build_architecture(arch, "demo", ArchOptions())), "yaml"),
         encoding="utf-8",
     )
-    b = runner.invoke(app, ["init", "demo", "-f", str(dump), "-o", str(from_file)])
+    b = runner.invoke(app, ["create", "demo", "-f", str(dump), "-o", str(from_file)])
     assert b.exit_code == 0, b.stdout
 
     compose_a = (from_arch / "demo" / "docker-compose.yaml").read_bytes()
@@ -107,7 +107,7 @@ def test_from_file_name_argument_overrides_file_name(runner: CliRunner, tmp_path
         dump_config(resolve(build_architecture("basic", "demo", ArchOptions())), "yaml"),
         encoding="utf-8",
     )
-    result = runner.invoke(app, ["init", "renamed", "-f", str(dump), "-o", str(tmp_path / "out")])
+    result = runner.invoke(app, ["create", "renamed", "-f", str(dump), "-o", str(tmp_path / "out")])
     assert result.exit_code == 0, result.stdout
     built = load_config(tmp_path / "out" / "renamed" / ".ignition-stack" / "config.json")
     assert built.name == "renamed"
@@ -121,7 +121,7 @@ def test_from_file_name_argument_overrides_file_name(runner: CliRunner, tmp_path
 def test_from_file_unknown_field_exits_with_readable_message(runner: CliRunner, tmp_path: Path) -> None:
     bad = tmp_path / "bad.yml"
     bad.write_text("name: demo\nnot_a_real_field: 1\n", encoding="utf-8")
-    result = runner.invoke(app, ["init", "demo", "-f", str(bad)])
+    result = runner.invoke(app, ["create", "demo", "-f", str(bad)])
     assert result.exit_code == 2, result.stdout
     # A validation message, not a traceback.
     assert "Traceback" not in result.stdout
@@ -135,7 +135,7 @@ def test_from_file_bad_enum_exits_with_readable_message(runner: CliRunner, tmp_p
         "name: demo\ndatabase:\n  kind: oracle\n",
         encoding="utf-8",
     )
-    result = runner.invoke(app, ["init", "demo", "-f", str(bad)])
+    result = runner.invoke(app, ["create", "demo", "-f", str(bad)])
     assert result.exit_code == 2, result.stdout
     assert "Traceback" not in result.stdout
     assert "unsupported database kind" in result.stdout
@@ -150,7 +150,7 @@ def test_from_file_with_arch_is_mutually_exclusive(runner: CliRunner, tmp_path: 
         dump_config(resolve(build_architecture("basic", "demo", ArchOptions())), "yaml"),
         encoding="utf-8",
     )
-    result = runner.invoke(app, ["init", "demo", "-f", str(dump), "--arch", "scale-out"])
+    result = runner.invoke(app, ["create", "demo", "-f", str(dump), "--arch", "scale-out"])
     assert result.exit_code == 2, result.stdout
     assert "cannot be combined" in result.stdout
 
@@ -168,7 +168,7 @@ def test_from_file_mcp_dropin_scaffolds_dropin_and_post_setup(runner: CliRunner,
     dump = tmp_path / "arch.yml"
     dump.write_text(dump_config(resolve(config), "yaml"), encoding="utf-8")
 
-    result = runner.invoke(app, ["init", "demo", "-f", str(dump), "-o", str(tmp_path)])
+    result = runner.invoke(app, ["create", "demo", "-f", str(dump), "-o", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
 
     project = tmp_path / "demo"
@@ -185,7 +185,7 @@ def test_from_file_mcp_dropin_scaffolds_dropin_and_post_setup(runner: CliRunner,
 def test_output_format_without_dry_run_errors(runner: CliRunner, tmp_path: Path) -> None:
     result = runner.invoke(
         app,
-        ["init", "demo", "--arch", "basic", "--output-format", "yaml", "-o", str(tmp_path)],
+        ["create", "demo", "--arch", "basic", "--output-format", "yaml", "-o", str(tmp_path)],
     )
     assert result.exit_code == 2, result.stdout
     assert "--output-format only applies with --dry-run" in result.stdout

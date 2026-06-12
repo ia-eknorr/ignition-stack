@@ -12,16 +12,16 @@ Ignition redundancy is a two-node arrangement: a **master** runs the system and 
 Pass `--redundant <role>` to `init`, naming the single workhorse role to pair:
 
 ```sh
-ignition-stack init demo --arch scale-out --redundant backend
-ignition-stack init demo --arch hub-and-spoke --redundant hub
-ignition-stack init demo --arch basic --redundant gateway
+ignition-stack create demo --arch scale-out --redundant backend
+ignition-stack create demo --arch hub-and-spoke --redundant hub
+ignition-stack create demo --arch basic --redundant gateway
 ```
 
 The wizard asks the same question (`Enable redundancy for the <role> gateway?`) for the eligible architectures.
 
 Redundancy applies to a **single** gateway. Replicated tiers - scale-out frontends, hub-and-spoke spokes - scale out horizontally rather than failing over, so `--redundant frontend` and `--redundant spoke` are rejected. (Ignition has no active/active or N-way redundancy; it is master/backup only.)
 
-Because the paired role is architecture-specific, redundancy does not always survive a [reshape](./reset-and-reshape.md): `switch-arch` drops it (with an advisory) when the target architecture has no gateway to pair, rather than failing the reshape.
+The paired role is architecture-specific, so if you re-create a stack on a different architecture using `create -f`, you may need to re-apply `--redundant` for the new topology's role.
 
 ## What gets generated
 

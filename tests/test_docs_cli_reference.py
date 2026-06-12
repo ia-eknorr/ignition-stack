@@ -116,7 +116,6 @@ def test_cli_reference_covers_every_option() -> None:
         "services/opcua-sim.md",
         "services/modbus-sim.md",
         "services/n8n.md",
-        "guides/reset-and-reshape.md",
         "guides/declarative-config.md",
         "guides/redundancy.md",
         "guides/teardown.md",

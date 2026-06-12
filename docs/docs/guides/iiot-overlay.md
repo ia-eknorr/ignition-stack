@@ -15,16 +15,16 @@ The connection seeds are written at generation time: each gateway boots with its
 
 ## Enable the overlay
 
-Pass `--iiot` to `init` to add the overlay with the default broker (`chariot`):
+Pass `--iiot` to `create` to add the overlay with the default broker (`chariot`):
 
 ```sh
-ignition-stack init demo --arch hub-and-spoke --iiot
+ignition-stack create demo --arch hub-and-spoke --iiot
 ```
 
 To choose a different broker, pass `--iiot-broker <slug>` (which implies `--iiot`):
 
 ```sh
-ignition-stack init demo --arch hub-and-spoke --iiot-broker emqx
+ignition-stack create demo --arch hub-and-spoke --iiot-broker emqx
 ```
 
 The broker slug must be a catalog `mqtt-broker` kind. The available options are:
@@ -116,10 +116,4 @@ service_instances:
 
 The attachment role drives which Cirrus module the resolver installs on that gateway. `consumer` (the default) attaches to the broker container's network without installing either module — useful for external subscribers.
 
-Use `init --dry-run --iiot` to dump the resolved config and inspect the full shape before building.
-
-## Reshaping with switch-arch
-
-`switch-arch` carries the IIoT wiring across a reshape. If the stack had a broker with Transmission/Engine wiring, the overlay re-runs on the new topology: spokes/frontends get Transmission, the hub/backend gets Engine. A basic IIoT stack reshaped to hub-and-spoke moves Transmission onto the spokes and Engine onto the hub automatically.
-
-See [Reset, rebuild, and switch architectures](./reset-and-reshape.md) for the full reshape flow.
+Use `create --dry-run --iiot` to dump the resolved config and inspect the full shape before building.

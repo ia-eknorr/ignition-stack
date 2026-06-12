@@ -5,7 +5,7 @@ description: The system architectures ignition-stack can generate, mirroring Ign
 
 # Architectures
 
-An architecture is the high-level shape of a stack: how many gateways, in what roles, on what network layout. The slugs mirror [Ignition's documented system architectures](https://docs.inductiveautomation.com/docs/8.3/system-architectures) — Basic, Scale Out, Hub and Spoke. You pick one at the start of the wizard, or name it directly with `ignition-stack init <name> --arch <slug>`. Every architecture resolves to the same kind of project; they differ only in the gateways and topology they set up. Architectures are editable presets, not forks: the [wizard's composer](../guides/wizard.md) lets you attach services per gateway from one as a starting point.
+An architecture is the high-level shape of a stack: how many gateways, in what roles, on what network layout. The slugs mirror [Ignition's documented system architectures](https://docs.inductiveautomation.com/docs/8.3/system-architectures) — Basic, Scale Out, Hub and Spoke. You pick one at the start of the wizard, or name it directly with `ignition-stack create <name> --arch <slug>`. Every architecture resolves to the same kind of project; they differ only in the gateways and topology they set up. Architectures are editable presets, not forks: the [wizard's composer](../guides/wizard.md) lets you attach services per gateway from one as a starting point.
 
 ## The architectures
 
@@ -23,6 +23,6 @@ Every architecture defaults its database to [Postgres](../services/postgres.md) 
 - Choose **scale-out** to show a frontend/backend split across the gateway network, the canonical multi-gateway field shape.
 - Choose **hub-and-spoke** to show one hub aggregating many Edge spokes. Watch the [RAM advisory](./hub-and-spoke.md#the-ram-advisory) as the spoke count grows.
 
-## Lifecycle
+## Configuration record
 
-The architecture you pick is saved in the stack's [configuration record](../concepts/configuration-record.md). `ignition-stack switch-arch <slug>` then reshapes the same stack under a different architecture, carrying your database, services, reverse-proxy, and edge choices across. See the [reset and reshape guide](../guides/reset-and-reshape.md).
+The architecture you pick is saved in the stack's [configuration record](../concepts/configuration-record.md). Pass that record back to `ignition-stack create <name> -f` to recreate or clone the stack — the positional name overrides the recorded one, so the same file can produce a differently-named project.

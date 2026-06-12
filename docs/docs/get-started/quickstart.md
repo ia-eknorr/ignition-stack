@@ -12,7 +12,7 @@ This walks you from an installed CLI to a running gateway with a `VALID` databas
 The fastest path is the default [basic architecture](../architectures/basic.md): one gateway plus a pre-seeded Postgres.
 
 ```sh
-ignition-stack init demo --arch basic
+ignition-stack create demo --arch basic
 cd demo
 docker compose up -d
 ```
@@ -21,10 +21,10 @@ The gateway reaches `RUNNING` with no UI prompts. Open `http://localhost:9088` a
 
 ## Use the wizard instead
 
-Run `init` without `--arch` to walk the interactive [wizard](../guides/wizard.md). It opens architecture-first, then prompts for the database, edition, IIoT, services, and exposure, ending in a summary you can preview, tweak, or generate:
+Run `create` without `--arch` to walk the interactive [wizard](../guides/wizard.md). It opens architecture-first, then prompts for the database, edition, IIoT, services, and exposure, ending in a summary you can preview, tweak, or generate:
 
 ```sh
-ignition-stack init demo
+ignition-stack create demo
 ```
 
 The wizard is the discoverable path; `--arch` (and the other flags in the [CLI reference](../reference/cli.md)) is the scriptable one. Both produce the same kind of project.
@@ -49,8 +49,8 @@ Everything in the project is meant to be read and tweaked by hand. Nothing is hi
 
 ```sh
 make wipe          # from inside the project
-# or
-ignition-stack wipe -C ./demo
+# or, without make
+docker compose -p demo down -v --remove-orphans
 ```
 
 Both remove only this project's containers and volumes. See [Tear down a stack](../guides/teardown.md) for how the scoping works.
@@ -59,4 +59,4 @@ Both remove only this project's containers and volumes. See [Tear down a stack](
 
 - [Architectures](../architectures/index.md) decide the shape of the stack.
 - [Services](../services/index.md) are the databases, brokers, and other containers you can add.
-- [The configuration record](../concepts/configuration-record.md) explains how every stack records itself for reset, reshape, and the declarative dump/build loop.
+- [The configuration record](../concepts/configuration-record.md) explains how every stack records itself and how to use `create -f` to recreate or clone it.

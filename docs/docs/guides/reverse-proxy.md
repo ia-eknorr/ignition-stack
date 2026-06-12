@@ -17,8 +17,8 @@ The routing host is `<route>.localtest.me`, where `<route>` is the project name 
 | scaffold | `--reverse-proxy scaffold` | Also lays down the [ia-eknorr/traefik-reverse-proxy](https://github.com/ia-eknorr/traefik-reverse-proxy) README under `--proxy-path` (default `reverse-proxy/`) so you can stand the proxy up. |
 
 ```sh
-ignition-stack init demo --arch scale-out --reverse-proxy external
-ignition-stack init demo --arch scale-out --reverse-proxy scaffold --proxy-path proxy
+ignition-stack create demo --arch scale-out --reverse-proxy external
+ignition-stack create demo --arch scale-out --reverse-proxy scaffold --proxy-path proxy
 ```
 
 Omit the flag for plain host-port mapping.
@@ -45,6 +45,6 @@ Choosing **Reverse proxy** detects whether a `proxy` Docker network already exis
 
 A proxied gateway carries the Traefik router labels (host rule, the gateway's `8088` web port as the target) and joins the external proxy network instead of mapping a host port. The `POST-SETUP.md` Connections reference lists each gateway's `*.localtest.me` URL, and — for a scaffold — points at the README that walks through installing the proxy in front of the stack. The link auto-forms once the proxy is up; the post-setup step is a verification, not manual wiring.
 
-## Reshaping
+## Cloning
 
-The exposure choice carries across [`switch-arch`](./reset-and-reshape.md), so a reshaped stack keeps its proxy routing (the routes simply re-derive from the new gateway names).
+The exposure choice is part of the [configuration record](../concepts/configuration-record.md), so `create <name> -f` rebuilds the proxy setup from the saved config — the routes re-derive from the new project name automatically.

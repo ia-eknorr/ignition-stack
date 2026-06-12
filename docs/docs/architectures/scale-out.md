@@ -29,14 +29,14 @@ Every gateway joins both networks, so a frontend can reach the database the back
 `--frontends N` adds more frontends. A single frontend keeps the bare name `frontend`; two or more are numbered `frontend-1`, `frontend-2`, … with ports stepping up from 9088, and the backend takes the next free port.
 
 ```sh
-ignition-stack init demo --arch scale-out --frontends 2
+ignition-stack create demo --arch scale-out --frontends 2
 # frontend-1: 9088   frontend-2: 9089   backend: 9090
 ```
 
 ## Run it
 
 ```sh
-ignition-stack init demo --arch scale-out
+ignition-stack create demo --arch scale-out
 ```
 
 Then:
@@ -52,7 +52,7 @@ docker compose up -d
 The split is on by default. Force it off to put every gateway plus the database on a single shared network:
 
 ```sh
-ignition-stack init demo --arch scale-out --no-network-split
+ignition-stack create demo --arch scale-out --no-network-split
 ```
 
 The Docker network split is separate from the Gateway Network described below: one isolates container traffic, the other is Ignition's gateway-to-gateway link.
