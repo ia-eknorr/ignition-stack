@@ -173,10 +173,10 @@ def _matching_gateways(config: ProjectConfig, redundant_role: str) -> list:
 def can_host_redundant_role(config: ProjectConfig, redundant_role: str) -> bool:
     """True when ``config`` has exactly one gateway that can be paired as master.
 
-    ``switch-arch`` uses this to decide whether redundancy intent recovered from
-    the old stack can carry to the target architecture, without raising the way
-    :func:`mark_redundant` does - an architecture-specific role (e.g. basic's
-    ``gateway``) simply may not exist in the destination.
+    Used to check whether a redundancy role from a recorded config could carry
+    to a target architecture, without raising the way :func:`mark_redundant`
+    does - an architecture-specific role (e.g. basic's ``gateway``) simply may
+    not exist in the destination.
     """
     if redundant_role in _NON_REDUNDANT_ROLES:
         return False

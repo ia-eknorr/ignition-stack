@@ -30,8 +30,8 @@ from ignition_stack.catalog.loader import CatalogLoadError, load_catalog
 from ignition_stack.catalog.schema import Catalog
 from ignition_stack.compose.engine import render_compose
 from ignition_stack.config.schema import ProjectConfig, ServiceInstance
-from ignition_stack.lifecycle.record import write_record
 from ignition_stack.postsetup import generate_post_setup
+from ignition_stack.record import write_record
 from ignition_stack.services.loader import load_all_services, service_dir
 from ignition_stack.services.resolver import resolve
 
@@ -76,13 +76,9 @@ def write_project(
     the on-disk seeds agree on the same fully-expanded stack.
 
     Every project records its resolved config under ``.ignition-stack/`` so
-    ``reset`` / ``switch-arch`` can regenerate or reshape it in place; the
-    same artifact can be dumped with ``init --dry-run`` and rebuilt with
-    ``init -f``.
-
-    ``overwrite`` lets ``reset`` / ``switch-arch`` write into a directory
-    that still holds the preserved ``.ignition-stack/`` record; normal ``init``
-    leaves it ``False`` so a stray non-empty directory still refuses to clobber.
+    the same stack can be recreated or cloned with ``create <name> -f``; the
+    same artifact can be dumped with ``create --dry-run`` and rebuilt with
+    ``create -f``.
 
     Returns the list of files written (absolute paths), in the order they
     were written. Raises :class:`FileExistsError` if ``target_dir`` already
@@ -520,7 +516,7 @@ COMPOSE := docker compose
 PROJECT := @@PROJECT@@
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs wipe reset
+.PHONY: help up down logs wipe
 
 help:  ## List available targets.
 \t@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \\
@@ -537,17 +533,14 @@ logs:  ## Follow logs for every service.
 
 wipe:  ## Remove ONLY this project's containers, networks, and volumes.
 \t$(COMPOSE) -p $(PROJECT) down -v --remove-orphans
-
-reset:  ## Regenerate this project from its recorded config.
-\tignition-stack reset
 """
 
 
 def _write_makefile(config: ProjectConfig, target_dir: Path) -> Path:
-    """Write the project ``Makefile`` (up/down/logs/wipe/reset).
+    """Write the project ``Makefile`` (up/down/logs/wipe).
 
     ``wipe`` is scoped to the compose project name so it cannot reach unrelated
-    Docker resources; that scoping is the Phase-7 cleanup contract.
+    Docker resources on the host.
     """
     body = _MAKEFILE.replace("@@PROJECT@@", config.name)
     dst = target_dir / "Makefile"

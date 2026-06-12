@@ -1,10 +1,10 @@
 """Serialize and load a resolved :class:`ProjectConfig` as YAML or JSON.
 
 The resolved config is the CLI's full build input - project name, gateways,
-networks, database, services, env. ``ignition-stack init --dry-run`` dumps it;
-``ignition-stack init -f <file>`` loads it back and builds from it. The same
-artifact is what the lifecycle record (:mod:`ignition_stack.lifecycle.record`)
-persists, so dump/edit/rebuild and reset/switch-arch share one schema.
+networks, database, services, env. ``ignition-stack create --dry-run`` dumps it;
+``ignition-stack create -f <file>`` loads it back and builds from it. The same
+artifact is what the record module (:mod:`ignition_stack.record`) persists, so
+dump/edit/rebuild share one schema.
 
 JSON dumps reuse pydantic's ``model_dump_json`` so the on-disk lifecycle record
 stays byte-identical to what it was before this module existed. YAML dumps go

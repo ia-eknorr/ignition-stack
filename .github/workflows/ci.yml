@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           uv run ignition-stack --version
-          uv run ignition-stack init ci-demo \
+          uv run ignition-stack create ci-demo \
             --arch basic -o "$RUNNER_TEMP/gen"
 
       - name: Golden tests
@@ -80,7 +80,7 @@ jobs:
 
       - name: Generate a basic + Postgres project
         run: >-
-          uv run ignition-stack init smoke
+          uv run ignition-stack create smoke
           --arch basic -o "$RUNNER_TEMP"
 
       - name: docker compose up -d
