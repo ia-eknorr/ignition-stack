@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-06-12
+
+### Fixed
+
+- **Documentation accuracy pass.** Corrected stale or incorrect claims the
+  architecture-first restructure left behind: the `scale-out` reverse-proxy flag
+  value (`external`/`scaffold`, not the removed `traefik`), the Keycloak admin
+  credentials (`admin` / `admin`), the `add-a-service` manifest field table (now
+  lists `singleton`, `placement`, `wires`, and `connection`), the path-filtered
+  `docs.yml` trigger, the `GATEWAY_MODULES_ENABLED` whitelist semantics, the
+  `mssql-jdbc-driver` wizard-default label, and the golden-test snapshot paths.
+  Documentation only — no code or generated-output changes.
+
 ## [0.6.0] - 2026-06-11
 
 ### Added
@@ -364,6 +377,7 @@ RUNNING with no manual UI steps.
 - Releases publish to PyPI automatically through GitHub Actions using Trusted
   Publishing (OIDC), with no stored API token.
 
+[0.6.1]: https://github.com/ia-eknorr/ignition-stack/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ia-eknorr/ignition-stack/compare/v0.3.0...v0.4.0
