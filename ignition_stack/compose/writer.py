@@ -63,12 +63,7 @@ _IIOT_VERIFIED_BROKERS = frozenset({"chariot"})
 _BROKER_MQTT_USER: dict[str, str] = {"chariot": "admin"}
 
 
-def write_project(
-    config: ProjectConfig,
-    target_dir: Path,
-    *,
-    overwrite: bool = False,
-) -> list[Path]:
+def write_project(config: ProjectConfig, target_dir: Path) -> list[Path]:
     """Generate the project tree at ``target_dir``.
 
     The config is resolved first (implicit dependencies expanded - see
@@ -82,10 +77,10 @@ def write_project(
 
     Returns the list of files written (absolute paths), in the order they
     were written. Raises :class:`FileExistsError` if ``target_dir`` already
-    has files and ``overwrite`` is ``False``.
+    has files.
     """
     target_dir = Path(target_dir).resolve()
-    if not overwrite and target_dir.exists() and any(target_dir.iterdir()):
+    if target_dir.exists() and any(target_dir.iterdir()):
         raise FileExistsError(f"target directory '{target_dir}' is not empty; refusing to overwrite")
     target_dir.mkdir(parents=True, exist_ok=True)
 

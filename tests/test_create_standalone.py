@@ -22,7 +22,7 @@ import pytest
 from typer.testing import CliRunner
 
 from ignition_stack.cli import app
-from ignition_stack.record import LIFECYCLE_DIR, has_record, read_record, record_path
+from ignition_stack.record import RECORD_DIR, has_record, read_record, record_path
 
 GOLDEN_DIR = Path(__file__).parent / "golden" / "standalone-postgres"
 
@@ -193,7 +193,7 @@ def test_create_from_file_clones_stack_under_new_name(runner: CliRunner, tmp_pat
     result = runner.invoke(app, ["create", "alpha", "--arch", "basic", "-o", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
 
-    config_file = alpha_dir / LIFECYCLE_DIR / "config.json"
+    config_file = alpha_dir / RECORD_DIR / "config.json"
     assert config_file.is_file()
 
     # Clone it under a new name.

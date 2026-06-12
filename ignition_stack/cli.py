@@ -38,7 +38,7 @@ from ignition_stack.config import (
     dump_config,
     load_config,
 )
-from ignition_stack.record import LIFECYCLE_DIR, RECORD_NAME
+from ignition_stack.record import RECORD_DIR, RECORD_NAME
 from ignition_stack.services.resolver import resolve
 from ignition_stack.update_check import (
     check_for_update,
@@ -313,7 +313,7 @@ def create(
     console.print("  docker compose up -d")
     console.print(f"  open {_gateway_open_url(config)}  (admin / {config.admin_password})")
     console.print()
-    console.print(f"  config recorded in {LIFECYCLE_DIR}/{RECORD_NAME} - recreate or clone this stack with `ignition-stack create <name> -f <that file>`.")
+    console.print(f"  config recorded in {RECORD_DIR}/{RECORD_NAME} - pass it to" " `ignition-stack create <name> -f` to recreate or clone this stack")
 
 
 def _gateway_open_url(config: ProjectConfig) -> str:

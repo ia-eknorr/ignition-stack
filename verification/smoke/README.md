@@ -13,10 +13,10 @@ bash verification/smoke/run-test.sh
 The harness:
 - creates `verification/smoke/.venv/` and `pip install -e .` from the working-tree branch
 - runs the `modules` checks first because they are fast and don't need Docker
-- then `ignition-stack init`, `docker compose up --wait`, polls `/StatusPing` for `RUNNING`, queries `/system/gwinfo` for the platform name and version, confirms `/` redirects past commissioning, and inspects `/data` inside the container for the bootstrap signatures (layered resources + deterministic gateway-network UUID)
+- then `ignition-stack create`, `docker compose up --wait`, polls `/StatusPing` for `RUNNING`, queries `/system/gwinfo` for the platform name and version, confirms `/` redirects past commissioning, and inspects `/data` inside the container for the bootstrap signatures (layered resources + deterministic gateway-network UUID)
 - writes every check to `results.log` and tears the stack down at the end (containers + named volume removed)
 
-The generated project tree is left at `verification/smoke/generated/smoke/` after a successful run for inspection. It's regenerated on every run and gitignored, since it's just the output of `ignition-stack init` against the bundled `ignition_stack/templates/standalone-postgres/` template.
+The generated project tree is left at `verification/smoke/generated/smoke/` after a successful run for inspection. It's regenerated on every run and gitignored, since it's just the output of `ignition-stack create` against the bundled `ignition_stack/templates/standalone-postgres/` template.
 
 ## Prerequisites
 
@@ -39,8 +39,8 @@ First run pulls ~700 MB for `inductiveautomation/ignition:8.3.6` if not cached.
 | modules | `modules validate --skip-network` rejects UNPINNED shas | catalog gate prevents half-bumped releases shipping |
 | modules | `modules download --offline` fails closed with empty cache | offline path does not silently succeed |
 | modules | `modules download` reports skipped-manual for `mcp-module` | EA-gated entry handling works |
-| init | `ignition-stack init smoke` writes the expected file tree | walking-skeleton generator runs end-to-end |
-| init | every expected file present, `docker-bootstrap.sh` executable, `.env` correct | generator output is structurally complete |
+| create | `ignition-stack create smoke` writes the expected file tree | walking-skeleton generator runs end-to-end |
+| create | every expected file present, `docker-bootstrap.sh` executable, `.env` correct | generator output is structurally complete |
 | boot | `docker compose up --wait` succeeds (db healthy + bootstrap exited 0) | compose health gating works |
 | boot | `/StatusPing` returns `{"state":"RUNNING"}` | gateway booted past STARTING |
 | boot | `/system/gwinfo` shows `ContextStatus=RUNNING`, `PlatformName=smoke`, `Version=8.3.6` | `-n` compose arg landed; gateway is the expected version |

@@ -84,7 +84,7 @@ class ComposerResult:
     the same exit-130 path the architecture flow uses). ``architecture``/
     ``options`` carry the originating architecture so the
     :class:`~ignition_stack.wizard.WizardOutcome` stays populated for the
-    lifecycle record and tests.
+    config record and tests.
     """
 
     config: ProjectConfig

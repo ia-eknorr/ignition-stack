@@ -557,7 +557,7 @@ class ProjectConfig(BaseModel):
             "('basic', 'scale-out', 'hub-and-spoke'). "
             "Informational - the compose engine reads from the resolved "
             "fields, not this slug - but lets generated files (header "
-            "comment, lifecycle records) name the architecture they came from."
+            "comment, config records) name the architecture they came from."
         ),
     )
 
