@@ -56,13 +56,26 @@ Back-navigation (issue #59)
 
 The flow is a **step machine, steps as data**: :data:`WIZARD_STEPS` is an
 ordered list of :class:`Step` objects, each with a ``name``, a human ``label``
-(for the issue #60 breadcrumb), an ``applies(answers)`` predicate, and an
-``ask(prompter, answers, allow_back)`` callable that prompts and returns the
-step's answer (or the :data:`BACK` sentinel). Walking advances through the
-applicable steps recording answers; the summary is reached when the cursor runs
-off the end of the list. The list is introspectable - given an ``answers`` dict
-you can recover the names, the applicable subset, and the current position -
-which is what the follow-up breadcrumb will render.
+(used by the issue #60 progress sign-posting), an ``applies(answers)``
+predicate, and an ``ask(prompter, answers, allow_back)`` callable that prompts
+and returns the step's answer (or the :data:`BACK` sentinel). Walking advances
+through the applicable steps recording answers; the summary is reached when the
+cursor runs off the end of the list. The list is introspectable - given an
+``answers`` dict you can recover the names, the applicable subset, and the
+current position - which is what :func:`_print_plan` and :func:`_step_counter`
+read.
+
+Progress sign-posting (issue #60)
+---------------------------------
+
+The wizard keeps questionary's natural scrolling Q&A (every answered question
+stays on screen) rather than redrawing a fixed header, matching how comparable
+scaffolding CLIs read. Orientation comes from two cheap, scrolling sign-posts:
+:func:`_print_plan` prints the numbered road ahead once, right after the
+architecture is chosen (the answer that decides which steps apply); and
+:func:`_step_counter` folds an ``"[N/M] "`` prefix into every later prompt via
+the prompter, so position and the finish line ride along with each question.
+The architecture prompt itself carries no counter - its total is not yet known.
 
 *Going back re-asks from that step forward.* Backing pops to the previous
 **applicable** step (skipped steps are jumped in both directions); each
@@ -101,6 +114,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from rich.console import Console
+from rich.text import Text
 
 from ignition_stack.architectures import (
     ArchitectureError,
@@ -247,8 +261,8 @@ class Step:
     ``applies`` decides whether the step is shown for the current ``answers``
     (so architecture-specific steps appear/vanish as earlier answers change).
     ``ask`` runs the prompt(s) and returns the step's answer, or :data:`BACK`
-    to request stepping back. ``label`` is the human name the issue #60
-    breadcrumb will render. The objects are pure data: the closures take the
+    to request stepping back. ``label`` is the human name the issue #60 plan and
+    step counter render. The objects are pure data: the closures take the
     prompter and the answers dict, holding no state of their own.
     """
 
@@ -305,19 +319,11 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
         if not step.applies(answers):
             i += 1
             continue
-        # Render the progress breadcrumb above this step's prompt.  Recompute
-        # applicable_steps each iteration so the total shrinks/grows correctly
-        # after an architecture change (e.g. basic→hub-and-spoke adds spokes).
-        _app = applicable_steps(answers)
-        _app_names = [s.name for s in _app]
-        _pos = _app_names.index(step.name) + 1 if step.name in _app_names else len(_app)
-        _total = len(_app)
-        # Build the trail: labels of steps already answered (in history order)
-        # plus the current step's label.
-        _answered_labels = [steps[idx].label for idx in history if steps[idx].name in _app_names]
-        _trail = [*_answered_labels, step.label]
-        _header = _breadcrumb(_pos, _total, _trail)
-        console.print(f"[dim]{_header}[/dim]")
+        # Fold an "[N/M] " counter into this step's prompt so the user always
+        # knows where they are and how many remain. Recomputed each iteration so
+        # it tracks the applicable set after a back-and-change. The architecture
+        # step gets no counter (the total isn't known until it's answered).
+        _set_progress(prompter, _step_counter(answers, step.name))
         # The first step (architecture) has no earlier prompt to return to, so it
         # carries no Back affordance.
         answer = step.ask(prompter, answers, bool(history))
@@ -327,6 +333,11 @@ def walk(name: str, prompter: Prompter) -> WizardOutcome:
         answers[step.name] = answer
         history.append(i)
         i += 1
+        # The architecture decides which steps apply, so once it is answered the
+        # full plan is known. Print it as a one-time sign-post of the road ahead
+        # (reprinted if the user backs up and changes the architecture).
+        if step.name == "architecture":
+            _print_plan(answers)
 
 
 def _options_from_answers(answers: Mapping[str, Any]) -> ArchOptions:
@@ -386,6 +397,9 @@ def _summary_phase(name: str, prompter: Prompter, answers: Mapping[str, Any]) ->
     resolved, and mutated by the add-loop); otherwise it is built fresh here. The
     preview loop lives here so it re-runs each time the summary is (re)entered.
     """
+    # The summary is the final screen; show it as the last step in the counter.
+    total = len(applicable_steps(answers)) + 1
+    _set_progress(prompter, f"[{total}/{total}] ")
     arch_slug = answers["architecture"]
     recorded = answers.get("services")
     if recorded is not None and len(recorded) == 2:
@@ -416,9 +430,11 @@ def _summary_phase(name: str, prompter: Prompter, answers: Mapping[str, Any]) ->
         return BACK
     if action == "tweak":
         # Hand the built, resolved config to the composer pre-filled. Its summary
-        # loop takes over and produces the final config.
+        # loop takes over and produces the final config. Clear the counter first:
+        # the composer's add-flow prompts are not part of the numbered plan.
         from ignition_stack import wizard_composer
 
+        _set_progress(prompter, "")
         result = wizard_composer.edit_loop(prompter, resolve(config), arch_slug, options)
         return _outcome_from_composer(result)
     return WizardOutcome(
@@ -895,7 +911,7 @@ def _step_services(prompter: Prompter, answers: dict[str, Any], allow_back: bool
 #: chosen architecture so count/split/redundancy steps appear only where they
 #: mean something (and are skipped in both walk directions otherwise). The
 #: summary is reached when the cursor runs past the end of this list. The
-#: follow-up breadcrumb (#60) renders ``label`` for the applicable subset.
+#: plan and step counter (#60) render ``label`` for the applicable subset.
 WIZARD_STEPS: list[Step] = [
     Step("architecture", "Architecture", lambda a: True, _step_architecture),
     Step("spokes", "Spoke count", lambda a: a.get("architecture") == "hub-and-spoke", _step_spokes),
@@ -914,44 +930,52 @@ WIZARD_STEPS: list[Step] = [
 def applicable_steps(answers: Mapping[str, Any]) -> list[Step]:
     """The wizard steps that apply for the given ``answers``.
 
-    Introspection seam for the breadcrumb: the position of the current step in
-    this list, and its length, give "step N of M".
+    Introspection seam for the plan + counter: the position of the current step
+    in this list, and its length, give "step N of M".
     """
     return [step for step in WIZARD_STEPS if step.applies(answers)]
 
 
-def _breadcrumb(position: int, total: int, trail_labels: list[str], max_width: int = 72) -> str:
-    """Build the one-line progress header shown above each wizard prompt.
+def _step_counter(answers: Mapping[str, Any], step_name: str) -> str:
+    """The ``"[N/M] "`` prompt prefix for a step, or ``""`` for architecture.
 
-    ``position`` is 1-based (the step the user is *about to answer*).
-    ``trail_labels`` includes the labels of already-answered steps plus the
-    current step's label (so the current label is always the last element).
-    The counter ``[N/M]`` is prefixed, then the full trail joined by `` > ``.
-    When the joined trail would push the whole line beyond ``max_width``
-    characters, the middle is replaced with ``...`` so the first answered step
-    and the current step are always visible.
-
-    Returns a plain string; the caller wraps it in Rich markup for dim styling.
+    ``M`` is the count of applicable steps plus one for the closing Review
+    screen, so the user can see the finish line. ``N`` is the step's 1-based
+    position in the applicable list. The architecture step returns ``""``: its
+    answer is what *decides* which steps apply, so before it is answered the
+    total is unknown - and a counter that jumped (e.g. 7→8) the moment the first
+    question was answered is exactly the confusion this replaces.
     """
-    counter = f"[{position}/{total}]"
-    sep = " › "  # noqa: RUF001  # SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
-    if not trail_labels:
-        return counter
+    if step_name == "architecture":
+        return ""
+    names = [step.name for step in applicable_steps(answers)]
+    if step_name not in names:
+        return ""
+    total = len(names) + 1  # +1 for the Review summary screen
+    return f"[{names.index(step_name) + 1}/{total}] "
 
-    full_trail = sep.join(trail_labels)
-    line = f"{counter} {full_trail}"
-    if len(line) <= max_width or len(trail_labels) <= 2:
-        return line
 
-    # Elide the middle: keep first and last labels with "…" between them.
-    # Always show at least the first completed step and the current step.
-    first = trail_labels[0]
-    last = trail_labels[-1]
-    candidate = f"{counter} {first}{sep}…{sep}{last}"
-    if len(candidate) <= max_width:
-        return candidate
-    # Extreme case: even first+…+last is too long; truncate just to last.
-    return f"{counter} {last}"
+def _print_plan(answers: Mapping[str, Any]) -> None:
+    """Print the numbered step plan once, after the architecture is chosen.
+
+    Lists every step that applies to the chosen architecture, then the closing
+    Review screen, so the user sees the whole road ahead and where it ends. It
+    scrolls with the rest of the Q&A - a one-time sign-post, not a pinned header
+    - and is reprinted if the architecture changes under back-navigation (which
+    changes the applicable set). A no-op renderable cost on non-TTY output.
+    """
+    app = applicable_steps(answers)
+    total = len(app) + 1
+    body = Text()
+    body.append("\nPlan ", style="bold")
+    body.append(f"· {total} steps\n", style="dim")
+    for n, step in enumerate(app, start=1):
+        # Only the architecture (the step just answered when this prints) is done.
+        done = step.name == "architecture"
+        body.append("  ✓ " if done else "    ", style="green")
+        body.append(f"{n}. {step.label}\n", style="dim" if done else None)
+    body.append(f"    {total}. Review\n", style="dim")
+    console.print(body)
 
 
 # --------------------------------------------------------------------------- #
@@ -959,12 +983,69 @@ def _breadcrumb(position: int, total: int, trail_labels: list[str], max_width: i
 # --------------------------------------------------------------------------- #
 
 
+# Title shown on the appended Back choice. Advertising the 'b' shortcut here is
+# the only place the keybinding is surfaced to the user, so keep them in sync.
+_BACK_TITLE = "← Back  (b)"
+
+
+def _set_progress(prompter: Prompter, prefix: str) -> None:
+    """Tell the prompter the current step's ``"[N/M] "`` prefix, if it supports it.
+
+    Only :class:`QuestionaryPrompter` renders the counter; scripted test
+    prompters ignore prompt messages entirely, so this is routed through
+    ``getattr`` and silently skipped when the method is absent. Keeping
+    ``set_progress`` off the :class:`Prompter` protocol means the test doubles
+    need not implement it.
+    """
+    setter = getattr(prompter, "set_progress", None)
+    if setter is not None:
+        setter(prefix)
+
+
+def _bind_back_key(question: Any) -> None:
+    """Bind the ``b`` key to Back on a questionary ``select`` Question.
+
+    questionary builds its own prompt_toolkit ``Application`` with a private
+    ``KeyBindings``; we reach in and register an eager ``b`` handler that exits
+    the prompt with the :data:`BACK` sentinel - the same result as moving the
+    cursor to the appended "← Back" row and pressing enter. Registering before
+    ``.unsafe_ask()`` runs is safe: the key processor is built lazily at run
+    time. The handler is added only when a Back row is present, so ``b`` is
+    inert on prompts that have no back affordance. ``b`` is otherwise unbound on
+    these selects (search-filtering is off), so nothing is shadowed.
+    """
+    try:
+        bindings = question.application.key_bindings
+    except AttributeError:  # pragma: no cover - defensive, shape is stable
+        return
+
+    @bindings.add("b", eager=True)
+    def _(event: Any) -> None:
+        event.app.exit(result=BACK)
+
+
 class QuestionaryPrompter:
     """Real-CLI prompter that delegates to ``questionary``.
 
     Each method translates the Prompter contract into the equivalent
     Questionary call. Imported lazily so unit tests don't require a TTY.
+
+    Holds the wizard's current ``"[N/M] "`` progress prefix (set by the walk via
+    :func:`_set_progress`) and folds it into every prompt message, so the
+    counter rides along with the question instead of printing as a separate line
+    that would stack up in the scrollback.
     """
+
+    def __init__(self) -> None:
+        self._progress = ""
+
+    def set_progress(self, prefix: str) -> None:
+        """Record the prefix prepended to the next prompt(s); ``""`` clears it."""
+        self._progress = prefix
+
+    def _msg(self, message: str) -> str:
+        """Prepend the current progress prefix to a prompt message."""
+        return f"{self._progress}{message}" if self._progress else message
 
     def select(
         self,
@@ -982,7 +1063,8 @@ class QuestionaryPrompter:
         if allow_back:
             # Append a dim Back row last; its value is the BACK sentinel, so the
             # answer round-trips straight into the step machine's back handler.
-            q_choices.append(questionary.Choice(title="← Back", value=BACK))
+            # The title advertises the 'b' shortcut bound below.
+            q_choices.append(questionary.Choice(title=_BACK_TITLE, value=BACK))
         # Questionary matches `default` against choice values, not titles, so
         # pass the slug straight through (or None when it isn't a real choice).
         default_value = default if any(value == default for value, _ in choices) else None
@@ -992,7 +1074,10 @@ class QuestionaryPrompter:
         # active via their defaults (use_jk_keys=True, use_emacs_keys=True).
         # use_search_filter is intentionally left False: questionary raises
         # ValueError when use_jk_keys and use_search_filter are both True.
-        answer = questionary.select(message, choices=q_choices, default=default_value, instruction=" ").unsafe_ask()
+        question = questionary.select(self._msg(message), choices=q_choices, default=default_value, instruction=" ")
+        if allow_back:
+            _bind_back_key(question)
+        answer = question.unsafe_ask()
         if answer is BACK:
             return BACK
         return str(answer)
@@ -1000,7 +1085,7 @@ class QuestionaryPrompter:
     def text(self, message: str, default: str = "") -> str:
         import questionary
 
-        answer = questionary.text(message, default=default).unsafe_ask()
+        answer = questionary.text(self._msg(message), default=default).unsafe_ask()
         return str(answer)
 
     def confirm(self, message: str, default: bool = False, allow_back: bool = False) -> Any:
@@ -1010,18 +1095,20 @@ class QuestionaryPrompter:
             # Render a back-able confirm as a 3-way select so the Back affordance
             # is uniform with the other steps; the y/n choices preserve the bool
             # contract. Plain confirms (allow_back=False) keep the native y/n UX.
-            answer = questionary.select(
-                message,
+            question = questionary.select(
+                self._msg(message),
                 choices=[
                     questionary.Choice(title="Yes", value=True),
                     questionary.Choice(title="No", value=False),
-                    questionary.Choice(title="← Back", value=BACK),
+                    questionary.Choice(title=_BACK_TITLE, value=BACK),
                 ],
                 default=bool(default),
                 instruction=" ",
-            ).unsafe_ask()
+            )
+            _bind_back_key(question)
+            answer = question.unsafe_ask()
             return answer if answer is BACK else bool(answer)
-        return bool(questionary.confirm(message, default=default).unsafe_ask())
+        return bool(questionary.confirm(self._msg(message), default=default).unsafe_ask())
 
     def integer(self, message: str, default: int, minimum: int = 0, allow_back: bool = False) -> Any:
         import questionary
@@ -1037,7 +1124,7 @@ class QuestionaryPrompter:
                 return f"Must be >= {minimum}."
             return True
 
-        answer = questionary.text(message, default=str(default), validate=_validate).unsafe_ask()
+        answer = questionary.text(self._msg(message), default=str(default), validate=_validate).unsafe_ask()
         return int(answer)
 
     def checkbox(self, message: str, choices: Sequence[tuple[str, str, bool]]) -> list[str]:
@@ -1049,6 +1136,6 @@ class QuestionaryPrompter:
         # and arrow navigation need no explanation.
         # checkbox uses `if instruction is not None` so instruction="" also
         # works, but an explicit descriptive string is more helpful.
-        answer = questionary.checkbox(message, choices=q_choices, instruction="(space to toggle)").unsafe_ask()
+        answer = questionary.checkbox(self._msg(message), choices=q_choices, instruction="(space to toggle)").unsafe_ask()
         # Questionary returns None on Ctrl-C and a list otherwise; normalize.
         return [str(a) for a in (answer or [])]

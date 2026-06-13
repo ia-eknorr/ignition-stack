@@ -1,77 +1,122 @@
-"""Progress breadcrumb for the wizard step machine (issue #60).
+"""Progress sign-posting for the wizard step machine (issue #60).
 
-Tests for:
-- ``_breadcrumb``: pure string-builder, independent of the prompter/walk.
-- ``applicable_steps``: count correctness per architecture.
-- Recount after back + architecture change (hub-and-spoke adds "spokes").
-- Elision of the middle trail when the line is too long.
+The wizard keeps questionary's natural scrolling Q&A (every answered question
+stays on screen) and orients the user two ways:
+
+- ``_print_plan``: a one-time numbered plan of the road ahead, printed once the
+  architecture (which decides the applicable steps) is chosen.
+- ``_step_counter``: an ``"[N/M] "`` prefix folded into each subsequent prompt
+  so the user sees position and the finish line.
+
+Tests cover the counter rules (architecture has none; the total counts the
+Review screen; it is stable once the architecture is set and grows for
+multi-gateway architectures), the plan rendering, the message folding, and the
+walk/back-nav integration that the counter recompute rides on.
 """
 
 from __future__ import annotations
 
+import io
+
+from rich.console import Console
+
+import ignition_stack.wizard as wizard
 from ignition_stack.wizard import (
     BACK,
-    _breadcrumb,
+    QuestionaryPrompter,
+    _print_plan,
+    _step_counter,
     applicable_steps,
     walk,
 )
 
 # --------------------------------------------------------------------------- #
-# _breadcrumb: pure function
+# _step_counter: position/total prefix
 # --------------------------------------------------------------------------- #
 
 
-def test_breadcrumb_single_step_no_trail() -> None:
-    """With just the current step label the output is '[1/9] Architecture'."""
-    result = _breadcrumb(1, 9, ["Architecture"])
-    assert result == "[1/9] Architecture"
+def test_counter_architecture_has_no_prefix() -> None:
+    """The architecture step shows no counter: its answer decides the total, so
+    before it is answered the total is unknown (and would otherwise jump)."""
+    assert _step_counter({"architecture": "basic"}, "architecture") == ""
 
 
-def test_breadcrumb_trail_within_width() -> None:
-    """Short trails are joined with ' › ' without elision."""
-    result = _breadcrumb(3, 9, ["Architecture", "Database", "Edition"])
-    assert result == "[3/9] Architecture › Database › Edition"
+def test_counter_total_includes_review_screen() -> None:
+    """M counts every applicable step plus the closing Review screen, so the
+    last real step is N-1 of M and the finish line is visible."""
+    answers = {"architecture": "basic"}
+    total = len(applicable_steps(answers)) + 1
+    # The last step before Review is at position total-1.
+    last_step = applicable_steps(answers)[-1].name
+    assert _step_counter(answers, last_step) == f"[{total - 1}/{total}] "
 
 
-def test_breadcrumb_elides_middle_when_trail_too_long() -> None:
-    """A trail that would exceed 72 chars gets its middle replaced with '…'."""
-    labels = [
-        "Architecture",
-        "Database",
-        "Edge edition",
-        "Network split",
-        "Redundancy",
-        "IIoT",
-        "Modules",
-    ]
-    result = _breadcrumb(7, 9, labels, max_width=72)
-    # Must be <= 72 chars and contain '…'
-    assert len(result) <= 72
-    assert "…" in result
-    # First and last labels must remain visible
-    assert "Architecture" in result
-    assert "Modules" in result
+def test_counter_database_position_basic() -> None:
+    """Basic: architecture(1), database(2) of 9 (8 steps + Review)."""
+    assert _step_counter({"architecture": "basic"}, "database") == "[2/9] "
 
 
-def test_breadcrumb_two_labels_never_elided() -> None:
-    """Even if first+last alone would exceed max_width, two-label trails are
-    kept intact (no elision — there is nothing to drop)."""
-    long_first = "A" * 30
-    long_last = "B" * 30
-    result = _breadcrumb(2, 2, [long_first, long_last], max_width=10)
-    assert "…" not in result
-    assert long_first in result and long_last in result
+def test_counter_grows_for_hub_and_spoke() -> None:
+    """Hub-and-spoke inserts spokes + network_split, so database slides to 3
+    and the total grows past basic's."""
+    assert _step_counter({"architecture": "hub-and-spoke"}, "database") == "[3/11] "
 
 
-def test_breadcrumb_empty_trail_returns_counter() -> None:
-    """An empty trail list returns just the counter (edge case guard)."""
-    assert _breadcrumb(1, 5, []) == "[1/5]"
+def test_counter_empty_for_inapplicable_step() -> None:
+    """A step that does not apply to the chosen architecture has no counter
+    (e.g. spokes under basic)."""
+    assert _step_counter({"architecture": "basic"}, "spokes") == ""
 
 
-def test_breadcrumb_counter_format() -> None:
-    """Counter is always [N/M] at the start of the string."""
-    result = _breadcrumb(4, 11, ["Step"])
-    assert result.startswith("[4/11]")
+# --------------------------------------------------------------------------- #
+# _print_plan: the one-time road map
+# --------------------------------------------------------------------------- #
+
+
+def _render_plan_text(answers: dict) -> str:
+    """Capture _print_plan's output as plain text via a non-terminal console."""
+    buf = io.StringIO()
+    original = wizard.console
+    wizard.console = Console(file=buf, force_terminal=False, width=80)
+    try:
+        _print_plan(answers)
+    finally:
+        wizard.console = original
+    return buf.getvalue()
+
+
+def test_plan_lists_every_applicable_step_and_review() -> None:
+    """The plan numbers every applicable step and ends on Review, with a count
+    header that matches (steps + Review)."""
+    answers = {"_name": "test", "architecture": "basic"}
+    text = _render_plan_text(answers)
+    total = len(applicable_steps(answers)) + 1
+    assert f"{total} steps" in text
+    for step in applicable_steps(answers):
+        assert step.label in text
+    assert f"{total}. Review" in text
+
+
+def test_plan_grows_for_multi_gateway_architecture() -> None:
+    """Hub-and-spoke's plan includes the steps basic's omits."""
+    text = _render_plan_text({"_name": "test", "architecture": "hub-and-spoke"})
+    assert "Spoke count" in text
+    assert "Network split" in text
+
+
+# --------------------------------------------------------------------------- #
+# QuestionaryPrompter: counter folded into the message
+# --------------------------------------------------------------------------- #
+
+
+def test_prompter_folds_progress_into_message() -> None:
+    """set_progress prefixes subsequent prompt messages; clearing removes it."""
+    p = QuestionaryPrompter()
+    assert p._msg("Database?") == "Database?"
+    p.set_progress("[2/9] ")
+    assert p._msg("Database?") == "[2/9] Database?"
+    p.set_progress("")
+    assert p._msg("Database?") == "Database?"
 
 
 # --------------------------------------------------------------------------- #
@@ -80,16 +125,12 @@ def test_breadcrumb_counter_format() -> None:
 
 
 def test_applicable_count_basic() -> None:
-    """Basic architecture: no spokes, no frontends, no network_split; has
-    redundancy. Total should be 9 (all 11 minus spokes and frontends)."""
-    steps = applicable_steps({"architecture": "basic"})
-    names = [s.name for s in steps]
+    """Basic: no spokes, no frontends, no network_split; has redundancy."""
+    names = [s.name for s in applicable_steps({"architecture": "basic"})]
     assert "spokes" not in names
     assert "frontends" not in names
     assert "network_split" not in names
     assert "redundancy" in names
-    # 11 total steps minus 3 architecture-conditional ones = 8, but let's not
-    # hard-code — just verify the known-absent and known-present steps.
 
 
 def test_applicable_count_hub_and_spoke_is_larger() -> None:
@@ -116,9 +157,10 @@ def test_applicable_count_scale_out() -> None:
 
 
 class _ScriptedPrompter:
-    """Minimal scripted prompter that records the breadcrumb header prints
-    are NOT its responsibility (they go to the console, not the prompter).
-    """
+    """Minimal scripted prompter. Progress prefixes and plan prints go to the
+    console, not the prompter, so this only replays the recorded answers — and
+    deliberately omits ``set_progress`` to prove the walk tolerates a prompter
+    without it (the call is getattr-guarded)."""
 
     def __init__(self, answers: list) -> None:
         self._answers = iter(answers)
@@ -146,20 +188,18 @@ class _ScriptedPrompter:
 
 
 def test_applicable_count_changes_after_arch_switch() -> None:
-    """After switching basic → hub-and-spoke the applicable count grows: the
-    walk re-asks applicable_steps each time, so the total shown at later steps
-    reflects the new architecture, not the old one."""
-    # Verify programmatically: basic has fewer applicable steps than hub-and-spoke.
+    """basic → hub-and-spoke grows the applicable count by two (spokes +
+    network_split), which is what the counter/plan recompute relies on."""
     basic_count = len(applicable_steps({"architecture": "basic"}))
     hub_count = len(applicable_steps({"architecture": "hub-and-spoke"}))
-    assert hub_count == basic_count + 2  # spokes + network_split added
+    assert hub_count == basic_count + 2
 
 
 def test_walk_with_arch_change_still_produces_correct_config() -> None:
-    """Back to architecture, switch basic → hub-and-spoke, complete: the
-    walk completes without error and produces a hub-and-spoke config. This
-    exercises the recount path indirectly (applicable_steps is called inside
-    walk each iteration)."""
+    """Back to architecture, switch basic → hub-and-spoke, complete: the walk
+    completes and produces a hub-and-spoke config. Exercises the recount path
+    (the plan reprints and the counter recomputes after the change) and proves a
+    prompter without set_progress runs cleanly."""
     prompter = _ScriptedPrompter(
         [
             "basic",  # architecture (first pass)
