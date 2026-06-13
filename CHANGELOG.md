@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-06-13
+
+### Changed
+
+- **Wizard progress is now a scrolling plan plus a step counter.** The
+  interactive wizard keeps every answered question on screen and, once the
+  architecture is chosen, prints a numbered plan of the remaining steps ending
+  at the Review screen, so what is left and when it ends are both visible. Each
+  later prompt carries an `[N/M]` counter. This replaces the breadcrumb header,
+  which only looked backward and either stacked down the scrollback or required
+  clearing the answered-question history. The architecture prompt shows no
+  counter because its answer is what sets the total.
+
+### Added
+
+- **`b` as a Back shortcut in the wizard.** Pressing `b` on any select or
+  confirm prompt that offers a Back choice steps back, the same as selecting the
+  `← Back` row.
+
 ## [0.7.0] - 2026-06-12
 
 ### Changed
