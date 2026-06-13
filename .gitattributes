@@ -3,6 +3,7 @@
 
 # Binary types we may carry or generate
 *.png binary
+*.ico binary
 *.modl binary
 *.jar binary
 *.gwbk binary
